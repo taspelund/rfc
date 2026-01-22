@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+use urlencoding::encode;
+
+use crate::api::DATATRACKER_BASE_URL;
 
 /// The type of document - either an RFC or an Internet-Draft
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -63,6 +66,16 @@ impl DocumentType {
         match self {
             DocumentType::Rfc(num) => format!("RFC {}", num),
             DocumentType::Draft(name) => name.clone(),
+        }
+    }
+
+    /// Get the IETF Datatracker URL for this document
+    pub fn datatracker_url(&self) -> String {
+        match self {
+            DocumentType::Rfc(num) => format!("{}/doc/rfc{}/", DATATRACKER_BASE_URL, num),
+            DocumentType::Draft(name) => {
+                format!("{}/doc/{}/", DATATRACKER_BASE_URL, encode(name))
+            }
         }
     }
 }
@@ -187,6 +200,22 @@ mod tests {
         assert_eq!(
             DocumentType::Draft("draft-ietf-quic-transport".to_string()).to_string(),
             "draft-ietf-quic-transport"
+        );
+    }
+
+    #[test]
+    fn test_datatracker_url() {
+        assert_eq!(
+            DocumentType::Rfc(9000).datatracker_url(),
+            "https://datatracker.ietf.org/doc/rfc9000/"
+        );
+        assert_eq!(
+            DocumentType::Draft("draft-ietf-quic-transport".to_string()).datatracker_url(),
+            "https://datatracker.ietf.org/doc/draft-ietf-quic-transport/"
+        );
+        assert_eq!(
+            DocumentType::Draft("draft with spaces/and/slashes".to_string()).datatracker_url(),
+            "https://datatracker.ietf.org/doc/draft%20with%20spaces%2Fand%2Fslashes/"
         );
     }
 

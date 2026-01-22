@@ -44,6 +44,13 @@ rfc -o "code -" 9000        # quoted forms with arguments are split for you
 
 The document is written to a tempfile and the viewer is invoked with the path as its final argument - works for editors and pagers alike.
 
+Open in web browser instead of viewing locally:
+
+```bash
+rfc -w 9000                 # Open RFC 9000 on IETF Datatracker
+rfc --web draft-ietf-quic-transport  # Open draft in browser
+```
+
 ### Refresh from the API
 
 There's no `--refresh` flag. To force a re-fetch, run `rfc fetch` then `rfc <doc>`:
