@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::api::DATATRACKER_BASE_URL;
+
 /// The type of document - either an RFC or an Internet-Draft
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DocumentType {
@@ -50,6 +52,14 @@ impl DocumentType {
         match self {
             DocumentType::Rfc(num) => format!("RFC {}", num),
             DocumentType::Draft(name) => name.clone(),
+        }
+    }
+
+    /// Get the IETF Datatracker URL for this document
+    pub fn datatracker_url(&self) -> String {
+        match self {
+            DocumentType::Rfc(num) => format!("{}/doc/rfc{}/", DATATRACKER_BASE_URL, num),
+            DocumentType::Draft(name) => format!("{}/doc/{}/", DATATRACKER_BASE_URL, name),
         }
     }
 }

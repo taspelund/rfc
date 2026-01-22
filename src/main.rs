@@ -31,6 +31,10 @@ struct Cli {
     #[arg(short, long)]
     fresh: bool,
 
+    /// Open document in web browser (IETF Datatracker)
+    #[arg(short = 'w', long, conflicts_with_all = ["pager", "open_with", "fresh"])]
+    web: bool,
+
     /// Only show drafts (with -s)
     #[arg(short, long, conflicts_with = "all")]
     drafts: bool,
@@ -92,7 +96,14 @@ async fn main() -> Result<()> {
 
     // Default: view document
     if let Some(document) = &cli.document {
-        return view_document(document, cli.pager, cli.open_with.as_deref(), cli.fresh).await;
+        return view_document(
+            document,
+            cli.pager,
+            cli.open_with.as_deref(),
+            cli.fresh,
+            cli.web,
+        )
+        .await;
     }
 
     Ok(())
@@ -121,8 +132,15 @@ async fn view_document(
     use_pager: bool,
     open_with: Option<&str>,
     fresh: bool,
+    web: bool,
 ) -> Result<()> {
     let doc_type = parse_document(document)?;
+
+    // If web flag is set, open in browser instead
+    if web {
+        return open_in_browser(&doc_type);
+    }
+
     let cache = CacheManager::new()?;
     let rfc_editor = DocumentFetcher::new()?;
 
@@ -179,6 +197,14 @@ fn html_to_text(html: &str) -> String {
         );
         html.to_string()
     })
+}
+
+/// Open a document in the default web browser
+fn open_in_browser(doc_type: &DocumentType) -> Result<()> {
+    let url = doc_type.datatracker_url();
+    eprintln!("Opening {} in browser...", doc_type);
+    opener::open(&url).with_context(|| format!("Failed to open URL: {}", url))?;
+    Ok(())
 }
 
 /// Open text in EDITOR or PAGER
