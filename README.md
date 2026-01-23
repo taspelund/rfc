@@ -12,6 +12,8 @@ A command-line tool to search, retrieve, and display IETF RFCs and Internet-Draf
 
 ## Installation
 
+This tool requires Rust. If you don't have Rust installed, visit [rustup.rs](https://rustup.rs/) for installation instructions.
+
 Build and install from source using Cargo:
 
 ```bash
