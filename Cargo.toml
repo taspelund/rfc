@@ -38,5 +38,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # Temp files for editor support
 tempfile = "3"
 
+# Open URLs in browser
+opener = "0.7"
+
 [dev-dependencies]
 tokio-test = "0.4"

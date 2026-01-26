@@ -51,6 +51,13 @@ rfc -o bat 9000             # Open with a specific program
 rfc -o "code -" 9000        # Open in VS Code
 ```
 
+Open in web browser instead of viewing locally:
+
+```bash
+rfc -w 9000                 # Open RFC 9000 on IETF Datatracker
+rfc --web draft-ietf-quic-transport  # Open draft in browser
+```
+
 ### Bypassing Cache
 
 Force a fresh fetch from the network:
@@ -119,6 +126,7 @@ Options:
   -p, --pager               Use PAGER instead of EDITOR
   -o, --open-with <PROGRAM> Program to open document with
   -f, --fresh               Fetch fresh copy, ignoring cache
+  -w, --web                 Open document in web browser (IETF Datatracker)
   -d, --drafts              Only show drafts (with -s)
   -a, --all                 Show both RFCs and drafts (with -s)
   -l, --limit <N>           Limit search results (with -s)
