@@ -43,25 +43,30 @@ rfc draft-ietf-quic-transport-34    # Specific version
 
 ### Viewer Options
 
-By default, documents open in your `$EDITOR` (or `less` if not set):
+By default, documents open in your `$EDITOR` (or `$PAGER` if EDITOR is not set):
 
 ```bash
-rfc -p 9000                 # Use $PAGER instead of $EDITOR
-rfc -o bat 9000             # Open with a specific program
+rfc 9000                    # Open with $EDITOR or $PAGER
+rfc -o /usr/bin/less 9000   # Open with specific program
 rfc -o "code -" 9000        # Open in VS Code
+rfc -f 9000                 # Fetch and cache only, don't open
 ```
 
-### Bypassing Cache
+### Cache Control
 
-Force a fresh fetch from the network:
+- **No flag** (default): Use cache if available, fetch from API if not
+- **`-r`/`--refresh`**: Fetch from API (ignoring cache) then open
+- **`-f`/`--fetch-only`**: Fetch from API (ignoring cache) and cache only, don't open
 
 ```bash
-rfc -f 9000                 # Fetch fresh copy, ignoring cache
+rfc 9000                    # Use cache if available
+rfc -r 9000                 # Fetch fresh from API and open
+rfc -f 9000                 # Fetch fresh from API and cache (no opening)
 ```
 
 ### Searching
 
-Search for RFCs by keyword (default):
+Search for RFCs by keyword (default), results show titles for easy identification:
 
 ```bash
 rfc -s quic                 # Search for RFCs containing "quic"
@@ -78,33 +83,50 @@ rfc -s quic -a              # Search both RFCs and drafts
 Limit results:
 
 ```bash
-rfc -s bgp -l 20            # Show only first 20 results
+rfc -s bgp -l 20            # Show first 20 results
 ```
+
+**Note:** Search results display document names in a copy-paste friendly format (e.g., `rfc4271`) that you can use directly with `rfc rfc4271`.
 
 ### Cache Management
 
 ```bash
 rfc --cache-info            # Show cache location and size
-rfc --list-cache            # List all cached documents
+rfc --list-cache            # List all cached documents with titles
+rfc --list-cache -w         # List cache with full titles (no truncation)
 rfc --uncache 9000          # Remove a specific document from cache
 rfc --clear-cache           # Clear all cached documents
 ```
+
+The `--list-cache` display shows document titles for easy identification, with titles truncated to fit within 80 characters per line (or full width with `-w` flag). Document names are displayed in copy-paste friendly format (e.g., `rfc4271`) for use with `rfc rfc4271`.
 
 ## Configuration
 
 ### Viewer Selection
 
-The viewer is selected in the following order:
+By default, documents open with `$EDITOR` if available, otherwise `$PAGER`:
 
-1. **`-o`/`--open-with`** - If specified, use this program
-2. **`-p`/`--pager` flag** - If set, use `$PAGER` environment variable
-3. **`$EDITOR`** - Use the editor environment variable
-4. **`less`** - Final fallback if nothing else is set
+- **`rfc 9000`** - Use `$EDITOR` if set, else `$PAGER`, else don't open
+- **`rfc 9000 -o PROGRAM`** - Use the specified program (e.g., `less`, `bat`, `code -`)
+
+### Fetch Behavior
+
+Control when documents are fetched from the API:
+
+- **`rfc 9000`** - Use cache if available, otherwise fetch from API
+- **`-r`/`--refresh`** - Fetch from API, ignore cache (implies fresh fetch)
+- **`-f`/`--fetch-only`** - Fetch from API and cache only, don't open (implies fresh fetch)
+
+Both `-r` and `-f` skip the local cache and always fetch from the API. The difference is that `-r` opens the document after fetching, while `-f` just caches it.
+
+### Cache Storage
 
 The cache is stored in the platform-specific cache directory:
 - **Linux**: `~/.cache/rfc/`
 - **macOS**: `~/Library/Caches/rfc/`
 - **Windows**: `{FOLDERID_LocalAppData}\rfc\cache\`
+
+Cached documents include both the document content (`.txt`) and metadata with titles (`.meta`).
 
 ## Command Reference
 
@@ -115,26 +137,33 @@ Arguments:
   [DOCUMENT]  RFC number or draft name to view
 
 Options:
-  -s, --search <QUERY>      Search for documents
-  -p, --pager               Use PAGER instead of EDITOR
-  -o, --open-with <PROGRAM> Program to open document with
-  -f, --fresh               Fetch fresh copy, ignoring cache
-  -d, --drafts              Only show drafts (with -s)
-  -a, --all                 Show both RFCs and drafts (with -s)
-  -l, --limit <N>           Limit search results (with -s)
-      --list-cache          List cached documents
-      --clear-cache         Clear all cached documents
-      --cache-info          Show cache info
-      --uncache <DOC>       Remove a document from cache
-  -h, --help                Print help
-  -V, --version             Print version
+  -s, --search <QUERY>       Search for documents
+  -o, --open-with <PROGRAM>  Program to open document with
+  -f, --fetch-only           Fetch from API only, skip cache
+  -r, --refresh              Refresh from API, ignore cache (then open)
+  -d, --drafts               Only show drafts (with -s)
+  -a, --all                  Show both RFCs and drafts (with -s)
+  -l, --limit <LIMIT>        Limit search results (with -s)
+  -w, --wide                 Show full titles without truncation (with --list-cache)
+      --list-cache           List cached documents
+      --clear-cache          Clear all cached documents
+      --cache-info           Show cache info
+      --uncache <DOC>        Remove a document from cache
+  -h, --help                 Print help
+  -V, --version              Print version
 ```
 
 ## Examples
 
 ```bash
-# Read the QUIC specification
+# Read the QUIC specification (uses cache if available)
 rfc 9000
+
+# Fetch fresh copy from API
+rfc -r 9000
+
+# Fetch and cache without opening
+rfc -f 9000
 
 # Search for TLS-related RFCs
 rfc -s tls
@@ -142,11 +171,13 @@ rfc -s tls
 # Find the latest HTTP/3 draft
 rfc -s http3 -d
 
-# View a document in VS Code
+# View a document with a specific program
+rfc -o /usr/bin/less 8446
 rfc -o "code -" 8446
 
-# Check what's cached
+# Check what's cached (with full titles)
 rfc --cache-info
+rfc --list-cache -w
 ```
 
 ## License

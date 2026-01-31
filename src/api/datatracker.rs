@@ -23,6 +23,8 @@ struct SearchResponse {
 #[derive(Debug, Deserialize)]
 struct SearchMeta {
     #[serde(default)]
+    total_count: Option<u32>,
+    #[serde(default)]
     next: Option<String>,
 }
 
@@ -114,6 +116,7 @@ impl DataTrackerClient {
         Ok(SearchResult {
             documents,
             has_more: search_response.meta.next.is_some() || returned_count == limit,
+            total_count: search_response.meta.total_count,
             query: query.to_string(),
             filter,
         })

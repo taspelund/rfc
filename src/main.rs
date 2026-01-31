@@ -19,17 +19,17 @@ struct Cli {
     #[arg(short, long, value_name = "QUERY")]
     search: Option<String>,
 
-    /// Use PAGER instead of EDITOR
-    #[arg(short, long)]
-    pager: bool,
-
-    /// Program to open document with (overrides EDITOR/PAGER)
+    /// Program to open document with
     #[arg(short = 'o', long, value_name = "PROGRAM")]
     open_with: Option<String>,
 
-    /// Fetch fresh copy, ignoring cache
-    #[arg(short, long)]
-    fresh: bool,
+    /// Fetch the document, but do not open it (implies -r)
+    #[arg(short = 'f', long)]
+    fetch_only: bool,
+
+    /// Fetch from API and refresh cache before opening
+    #[arg(short = 'r', long)]
+    refresh: bool,
 
     /// Only show drafts (with -s)
     #[arg(short, long, conflicts_with = "all")]
@@ -91,12 +91,19 @@ async fn main() -> Result<()> {
         } else {
             SearchFilter::RfcsOnly
         };
-        return search_documents(query, cli.limit.unwrap_or(100), filter).await;
+        return search_documents(query, cli.limit.unwrap_or(25), filter).await;
     }
 
     // Default: view document
     if let Some(document) = &cli.document {
-        return view_document(document, cli.pager, cli.open_with.as_deref(), cli.fresh).await;
+        // -f/--fetch-only: fetch from API, cache, and don't open
+        // (implies refreshing from API)
+        if cli.fetch_only {
+            return fetch_only_document(document).await;
+        }
+        // Otherwise: view with optional refresh
+        // -r/--refresh: fetch from API before opening
+        return view_document(document, cli.open_with.as_deref(), cli.refresh).await;
     }
 
     Ok(())
@@ -119,19 +126,18 @@ fn parse_document(doc: &str) -> Result<DocumentType> {
     Ok(DocumentType::Draft(draft_name))
 }
 
-/// View a document using EDITOR or PAGER
+/// View a document, optionally refreshing from API
 async fn view_document(
     document: &str,
-    use_pager: bool,
     open_with: Option<&str>,
-    fresh: bool,
+    refresh: bool,
 ) -> Result<()> {
     let doc_type = parse_document(document)?;
     let cache = CacheManager::new()?;
     let rfc_editor = DocumentFetcher::new()?;
 
-    // Check cache first (unless fresh requested)
-    let content = if !fresh {
+    // Check cache first (unless refresh requested)
+    let content = if !refresh {
         if let Some(cached) = cache.get_document(&doc_type, Format::Text) {
             eprintln!("Using cached copy of {}", doc_type);
             cached
@@ -142,8 +148,21 @@ async fn view_document(
         fetch_and_cache(&doc_type, &cache, &rfc_editor).await?
     };
 
-    // Open in editor or pager
-    open_in_viewer(&content, use_pager, open_with)?;
+    // Open in viewer if a program is specified or defaults are available
+    open_in_viewer(&content, open_with)?;
+
+    Ok(())
+}
+
+/// Fetch a document and cache it without opening
+async fn fetch_only_document(document: &str) -> Result<()> {
+    let doc_type = parse_document(document)?;
+    let cache = CacheManager::new()?;
+    let rfc_editor = DocumentFetcher::new()?;
+
+    eprintln!("Fetching {}...", doc_type);
+    fetch_and_cache(&doc_type, &cache, &rfc_editor).await?;
+    eprintln!("Cached {}. Use 'rfc {}' to view.", doc_type, doc_type);
 
     Ok(())
 }
@@ -208,23 +227,37 @@ fn html_to_text(html: &str) -> String {
 }
 
 /// Open text in EDITOR or PAGER
-fn open_in_viewer(text: &str, use_pager: bool, open_with: Option<&str>) -> Result<()> {
-    let viewer = if let Some(program) = open_with {
-        program.to_string()
-    } else if use_pager {
-        env::var("PAGER").unwrap_or_else(|_| "less".to_string())
-    } else {
-        env::var("EDITOR").unwrap_or_else(|_| "less".to_string())
+/// Open text in a viewer
+///
+/// Default behavior (no --open-with):
+/// 1. Try $EDITOR environment variable
+/// 2. Fall back to $PAGER environment variable
+/// 3. If neither is set, don't open (just return)
+///
+/// With --open-with <PROGRAM>: use that specific program
+fn open_in_viewer(text: &str, open_with: Option<&str>) -> Result<()> {
+    // Determine the viewer to use
+    let viewer = match open_with {
+        Some(program) => program.to_string(),
+        None => {
+            // Default: EDITOR -> PAGER -> don't open
+            if let Ok(editor) = env::var("EDITOR") {
+                editor
+            } else if let Ok(pager) = env::var("PAGER") {
+                pager
+            } else {
+                return Ok(()); // No viewer available, just return
+            }
+        }
     };
 
-    // For editors, we need to write to a temp file
-    // For pagers, we can pipe to stdin
-    let is_pager = use_pager
-        || viewer == "less"
+    // Detect if this is a pager-like program
+    let is_pager = viewer == "less"
         || viewer == "more"
         || viewer == "most"
         || viewer.contains("less")
-        || viewer.contains("more");
+        || viewer.contains("more")
+        || viewer.ends_with("pager");
 
     if is_pager {
         // Pipe to pager
@@ -271,14 +304,38 @@ async fn search_documents(query: &str, limit: usize, filter: SearchFilter) -> Re
     }
 
     let shown = results.len();
-    println!("\nFound {} results:\n", shown);
 
-    for (i, doc) in results.documents.iter().enumerate() {
-        println!("{}. {} - {}", i + 1, doc.doc_type, doc.title);
+    // Report results with total count if available
+    if let Some(total) = results.total_count {
+        if results.has_more {
+            println!("\nShowing {} of {} results (use -l to show more):\n", shown, total);
+        } else {
+            println!("\nFound {} results:\n", total);
+        }
+    } else {
+        // Fallback if total count not available
+        if results.has_more {
+            println!("\nShowing {} results (more available, use -l to show more):\n", shown);
+        } else {
+            println!("\nFound {} results:\n", shown);
+        }
     }
 
-    if results.has_more {
-        println!("\n(More results available. Use -l to show more.)");
+    // Calculate max name width for alignment (80 char total line width)
+    let max_name_width = results.documents
+        .iter()
+        .map(|doc| doc.doc_type.name().len())
+        .max()
+        .unwrap_or(10);
+
+    // Available width for title: 80 total - name - 2 separator - some margin
+    let available_width = 80_usize.saturating_sub(max_name_width).saturating_sub(4);
+    let title_width = available_width.min(77); // Reasonable min
+
+    for doc in &results.documents {
+        let name = doc.doc_type.name();
+        let title = truncate_title(&doc.title, title_width);
+        println!("{:<width$}  {}", name, title, width = max_name_width);
     }
 
     println!("\nUse 'rfc <document>' to read a document");
@@ -298,14 +355,16 @@ fn list_cache(wide: bool) -> Result<()> {
 
     println!("Cached documents ({}):\n", cached.len());
 
-    // Calculate max name width for alignment
+    // Calculate max name width for alignment (80 char total line width)
     let max_name_width = cached
         .iter()
         .map(|cd| cd.doc_type.name().len())
         .max()
         .unwrap_or(10);
 
-    let title_width = if wide { usize::MAX } else { 60 };
+    // Available width for title: 80 total - name - 2 separator - some margin
+    let available_width = 80_usize.saturating_sub(max_name_width).saturating_sub(4);
+    let title_width = if wide { usize::MAX } else { available_width.min(77) };
     let mut missing_count = 0;
 
     for cached_doc in &cached {
