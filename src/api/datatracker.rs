@@ -57,29 +57,65 @@ impl DataTrackerClient {
         })
     }
 
-    /// Search for documents matching the query
-    /// Only returns RFCs and Internet-Drafts (filters out slides, reviews, etc.)
+    /// Search for documents matching the query.
+    ///
+    /// The query is tokenized on whitespace and pushed to the server as much
+    /// as possible:
+    ///
+    /// - the longest token becomes a `title__icontains` filter,
+    /// - the second-longest (if any) becomes an `abstract__icontains` filter,
+    /// - `type__in=rfc,draft` (or the user's explicit `--rfc`/`--draft`)
+    ///   ensures we don't waste payload on slides, agendas, charters, etc.
+    ///
+    /// Any remaining (3rd+) tokens are AND-ed locally against title+abstract.
+    /// This makes word-order-independent searches like "bgp message" work
+    /// without the user having to guess the exact phrase, while keeping the
+    /// JSON payload (and latency) small.
     pub async fn search(
         &self,
         query: &str,
         filter: SearchFilter,
         limit: u32,
     ) -> Result<SearchResult> {
-        // Request more results than needed since we filter locally
-        // The API returns many document types we don't want (slides, reviews, etc.)
-        let api_limit = limit.saturating_mul(5);
+        let tokens: Vec<String> = query
+            .split_whitespace()
+            .map(|t| t.to_lowercase())
+            .collect();
 
-        // Search by title (not name) since that's where keywords like "bgp" appear
+        // Pick the longest token for the title filter, the second-longest for
+        // the abstract filter. Falls back to the raw query when there are no
+        // whitespace-separated tokens (e.g. empty input).
+        let mut by_length: Vec<&str> = tokens.iter().map(String::as_str).collect();
+        by_length.sort_by_key(|t| std::cmp::Reverse(t.len()));
+        let primary_token = by_length.first().copied().unwrap_or(query);
+        let secondary_token = by_length.get(1).copied();
+
+        // Server-side type filter. If the user asked for --rfc or --draft we
+        // honor that; otherwise we restrict to rfc+draft so the response
+        // doesn't waste rows on slides, charters, reviews, etc.
+        let type_filter = filter.api_param().unwrap_or("rfc,draft");
+
+        // Cushion sizing. With both title and abstract filters server-side,
+        // multi-token queries are already very selective — asking for the
+        // user's limit verbatim is enough. Single-token queries lack the
+        // abstract filter, so we keep a small cushion (3x) for the
+        // ID-ordering-fallthrough effect we observed in benchmarks.
+        let base_limit = limit.max(25);
+        let api_limit = if secondary_token.is_some() {
+            base_limit
+        } else {
+            base_limit.saturating_mul(3)
+        };
+
         let mut url = format!(
-            "{}/api/v1/doc/document/?title__icontains={}&limit={}&format=json",
+            "{}/api/v1/doc/document/?title__icontains={}&type__in={}&limit={}&format=json",
             DATATRACKER_BASE_URL,
-            urlencoding::encode(query),
+            urlencoding::encode(primary_token),
+            type_filter,
             api_limit
         );
-
-        // Add type filter if specified
-        if let Some(type_param) = filter.api_param() {
-            url.push_str(&format!("&type={}", type_param));
+        if let Some(s) = secondary_token {
+            url.push_str(&format!("&abstract__icontains={}", urlencoding::encode(s)));
         }
 
         let response = self
@@ -102,21 +138,47 @@ impl DataTrackerClient {
             .await
             .context("Failed to parse search response")?;
 
-        // Filter to only RFCs and drafts, then take up to the requested limit
+        // 3rd+ tokens weren't sent to the API; each must still match locally
+        // against title or abstract for the document to be included.
+        let extra_tokens: Vec<&str> = by_length.iter().copied().skip(2).collect();
+
+        let matches_extra_tokens = |doc: &ApiDocument| -> bool {
+            if extra_tokens.is_empty() {
+                return true;
+            }
+            let title_lc = doc.title.to_lowercase();
+            let abstract_lc = doc.abstract_text.as_deref().unwrap_or("").to_lowercase();
+            extra_tokens
+                .iter()
+                .all(|tok| title_lc.contains(tok) || abstract_lc.contains(tok))
+        };
+
+        // Filter to only RFCs and drafts that match all query tokens, then take
+        // up to the requested limit.
         let documents: Vec<Document> = search_response
             .objects
             .into_iter()
             .filter(|doc| Self::is_rfc_or_draft(&doc.name))
+            .filter(matches_extra_tokens)
             .map(|doc| self.convert_api_document(doc))
             .take(limit as usize)
             .collect();
 
         let returned_count = documents.len() as u32;
 
+        // The API's total_count reflects all server-side filters (title,
+        // abstract, type) — it's accurate when we have no further local
+        // filtering to do. With 3+ tokens we filter locally too, so drop it.
+        let total_count = if extra_tokens.is_empty() {
+            search_response.meta.total_count
+        } else {
+            None
+        };
+
         Ok(SearchResult {
             documents,
             has_more: search_response.meta.next.is_some() || returned_count == limit,
-            total_count: search_response.meta.total_count,
+            total_count,
             query: query.to_string(),
             filter,
         })

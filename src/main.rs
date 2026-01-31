@@ -308,14 +308,14 @@ async fn search_documents(query: &str, limit: usize, filter: SearchFilter) -> Re
     // Report results with total count if available
     if let Some(total) = results.total_count {
         if results.has_more {
-            println!("\nShowing {} of {} results (use -l to show more):\n", shown, total);
+            println!("\nShowing {} of {} results. Increase --limit <N> to show more.\n", shown, total);
         } else {
             println!("\nFound {} results:\n", total);
         }
     } else {
         // Fallback if total count not available
         if results.has_more {
-            println!("\nShowing {} results (more available, use -l to show more):\n", shown);
+            println!("\nShowing {} results. Increase --limit <N> to show more.\n", shown);
         } else {
             println!("\nFound {} results:\n", shown);
         }
