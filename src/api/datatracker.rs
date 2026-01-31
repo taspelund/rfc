@@ -147,6 +147,33 @@ impl DataTrackerClient {
         }
     }
 
+    /// Get a single document by name
+    pub async fn get_document(&self, name: &str) -> Result<Document> {
+        let url = format!(
+            "{}/api/v1/doc/document/{}/?format=json",
+            DATATRACKER_BASE_URL,
+            name
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch document metadata")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Document not found: {}", name);
+        }
+
+        let api_doc: ApiDocument = response
+            .json()
+            .await
+            .context("Failed to parse document metadata")?;
+
+        Ok(self.convert_api_document(api_doc))
+    }
+
     /// Parse document type from name
     fn parse_doc_type(&self, name: &str) -> DocumentType {
         if let Some(num_str) = name.strip_prefix("rfc") {

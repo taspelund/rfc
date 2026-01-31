@@ -4,7 +4,7 @@ use std::env;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use rfc::{CacheManager, DataTrackerClient, DocumentFetcher, DocumentType, Format, SearchFilter};
+use rfc::{CacheManager, CacheMetadata, DataTrackerClient, DocumentFetcher, DocumentType, Format, SearchFilter};
 
 #[derive(Parser)]
 #[command(name = "rfc")]
@@ -58,6 +58,10 @@ struct Cli {
     /// Remove a document from cache
     #[arg(long, value_name = "DOC")]
     uncache: Option<String>,
+
+    /// Show full titles without truncation (with --list-cache)
+    #[arg(short = 'w', long)]
+    wide: bool,
 }
 
 #[tokio::main]
@@ -66,7 +70,7 @@ async fn main() -> Result<()> {
 
     // Handle cache operations first
     if cli.list_cache {
-        return list_cache();
+        return list_cache(cli.wide);
     }
     if cli.clear_cache {
         return clear_cache();
@@ -167,7 +171,29 @@ async fn fetch_and_cache(
     // Cache the text content
     cache.store_document(doc_type, Format::Text, &text)?;
 
+    // Fetch and cache metadata (best effort - don't fail if this fails)
+    if let Err(e) = fetch_and_store_metadata(doc_type, cache).await {
+        eprintln!("Warning: Failed to fetch metadata for {}: {}", doc_type, e);
+    }
+
     Ok(text)
+}
+
+/// Fetch metadata from Datatracker and store it
+async fn fetch_and_store_metadata(
+    doc_type: &DocumentType,
+    cache: &CacheManager,
+) -> Result<()> {
+    let client = DataTrackerClient::new()?;
+    let doc = client.get_document(&doc_type.name()).await?;
+
+    let metadata = CacheMetadata {
+        title: doc.title,
+        cached_at: chrono::Utc::now(),
+    };
+
+    cache.store_metadata(doc_type, &metadata)?;
+    Ok(())
 }
 
 /// Convert HTML to plain text
@@ -260,21 +286,66 @@ async fn search_documents(query: &str, limit: usize, filter: SearchFilter) -> Re
     Ok(())
 }
 
-/// List cached documents
-fn list_cache() -> Result<()> {
+/// List cached documents with optional titles
+fn list_cache(wide: bool) -> Result<()> {
     let cache = CacheManager::new()?;
-    let cached = cache.list_cached();
+    let cached = cache.list_cached_with_metadata();
 
     if cached.is_empty() {
         println!("Cache is empty");
-    } else {
-        println!("Cached documents ({}):\n", cached.len());
-        for doc_type in cached {
-            println!("  {}", doc_type);
+        return Ok(());
+    }
+
+    println!("Cached documents ({}):\n", cached.len());
+
+    // Calculate max name width for alignment
+    let max_name_width = cached
+        .iter()
+        .map(|cd| cd.doc_type.name().len())
+        .max()
+        .unwrap_or(10);
+
+    let title_width = if wide { usize::MAX } else { 60 };
+    let mut missing_count = 0;
+
+    for cached_doc in &cached {
+        let name = cached_doc.doc_type.name();
+
+        if let Some(meta) = &cached_doc.metadata {
+            let title = truncate_title(&meta.title, title_width);
+            println!("{:<width$}  {}", name, title, width = max_name_width);
+        } else {
+            println!(
+                "{:<width$}  (title unavailable)",
+                name,
+                width = max_name_width
+            );
+            missing_count += 1;
         }
     }
 
+    if missing_count > 0 {
+        println!(
+            "\n({} document{} without title - re-cache with --fresh to fetch metadata)",
+            missing_count,
+            if missing_count == 1 { "" } else { "s" }
+        );
+    }
+
     Ok(())
+}
+
+/// Truncate title to a maximum width
+fn truncate_title(title: &str, max_width: usize) -> String {
+    if max_width == usize::MAX || title.chars().count() <= max_width {
+        title.to_string()
+    } else {
+        let truncated: String = title
+            .chars()
+            .take(max_width.saturating_sub(3))
+            .collect();
+        format!("{}...", truncated)
+    }
 }
 
 /// Clear all cached documents

@@ -4,7 +4,15 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 
+use crate::cache::CacheMetadata;
 use crate::models::{DocumentType, Format};
+
+/// A cached document with optional metadata
+#[derive(Debug, Clone)]
+pub struct CachedDocument {
+    pub doc_type: DocumentType,
+    pub metadata: Option<CacheMetadata>,
+}
 
 /// Manages local document caching
 pub struct CacheManager {
@@ -65,10 +73,12 @@ impl CacheManager {
     }
 
     /// Remove a specific document from cache
+    /// Removes document content and associated metadata
     /// Returns true if the document was found and removed
     pub fn remove(&self, doc: &DocumentType) -> Result<bool> {
         let html_path = self.document_path(doc, Format::Html);
         let text_path = self.document_path(doc, Format::Text);
+        let meta_path = self.metadata_path(doc);
 
         let mut removed = false;
 
@@ -80,6 +90,10 @@ impl CacheManager {
         if text_path.exists() {
             fs::remove_file(&text_path).context("Failed to remove cached text file")?;
             removed = true;
+        }
+
+        if meta_path.exists() {
+            fs::remove_file(&meta_path).context("Failed to remove cached metadata file")?;
         }
 
         Ok(removed)
@@ -121,11 +135,49 @@ impl CacheManager {
             .join("documents")
             .join(format!("{}.{}", doc.name(), format.extension()))
     }
+
+    /// Get the path for metadata file
+    fn metadata_path(&self, doc: &DocumentType) -> PathBuf {
+        self.cache_dir
+            .join("documents")
+            .join(format!("{}.meta", doc.name()))
+    }
+
+    /// Get cached metadata for a document
+    pub fn get_metadata(&self, doc: &DocumentType) -> Option<CacheMetadata> {
+        let path = self.metadata_path(doc);
+        let content = fs::read_to_string(path).ok()?;
+        serde_json::from_str(&content).ok()
+    }
+
+    /// Store metadata for a document
+    pub fn store_metadata(&self, doc: &DocumentType, meta: &CacheMetadata) -> Result<()> {
+        let path = self.metadata_path(doc);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).context("Failed to create metadata directory")?;
+        }
+        let content = serde_json::to_string_pretty(meta)
+            .context("Failed to serialize metadata")?;
+        fs::write(path, content).context("Failed to write metadata file")?;
+        Ok(())
+    }
+
+    /// List cached documents with their metadata
+    pub fn list_cached_with_metadata(&self) -> Vec<CachedDocument> {
+        self.list_cached()
+            .into_iter()
+            .map(|doc_type| {
+                let metadata = self.get_metadata(&doc_type);
+                CachedDocument { doc_type, metadata }
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use tempfile::TempDir;
 
     fn test_cache() -> (CacheManager, TempDir) {
@@ -181,7 +233,7 @@ mod tests {
         // Remove non-existent returns false
         assert!(!cache.remove(&doc).unwrap());
 
-        // Store both formats and remove
+        // Store both formats and metadata, then remove
         cache
             .store_document(&doc, Format::Html, "html content")
             .unwrap();
@@ -189,11 +241,18 @@ mod tests {
             .store_document(&doc, Format::Text, "text content")
             .unwrap();
 
+        let meta = CacheMetadata {
+            title: "Test Title".to_string(),
+            cached_at: Utc::now(),
+        };
+        cache.store_metadata(&doc, &meta).unwrap();
+
         assert!(cache.remove(&doc).unwrap());
 
-        // Verify both formats are gone
+        // Verify both formats and metadata are gone
         assert!(cache.get_document(&doc, Format::Html).is_none());
         assert!(cache.get_document(&doc, Format::Text).is_none());
+        assert!(cache.get_metadata(&doc).is_none());
 
         // Second remove returns false
         assert!(!cache.remove(&doc).unwrap());
@@ -224,5 +283,73 @@ mod tests {
         let cached = cache.list_cached();
         assert_eq!(cached.len(), 1);
         assert!(cached.contains(&draft));
+    }
+
+    #[test]
+    fn test_store_and_retrieve_metadata() {
+        let (cache, _temp) = test_cache();
+        let doc = DocumentType::Rfc(9000);
+        let meta = CacheMetadata {
+            title: "QUIC: A UDP-Based Multiplexed and Secure Transport".to_string(),
+            cached_at: Utc::now(),
+        };
+
+        cache.store_metadata(&doc, &meta).unwrap();
+
+        let retrieved = cache.get_metadata(&doc);
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.title, meta.title);
+    }
+
+    #[test]
+    fn test_list_cached_with_metadata() {
+        let (cache, _temp) = test_cache();
+
+        let doc1 = DocumentType::Rfc(9000);
+        let doc2 = DocumentType::Rfc(8200);
+
+        cache
+            .store_document(&doc1, Format::Text, "test")
+            .unwrap();
+        cache
+            .store_document(&doc2, Format::Text, "test")
+            .unwrap();
+
+        let meta1 = CacheMetadata {
+            title: "QUIC Transport".to_string(),
+            cached_at: Utc::now(),
+        };
+        cache.store_metadata(&doc1, &meta1).unwrap();
+
+        let cached = cache.list_cached_with_metadata();
+        assert_eq!(cached.len(), 2);
+
+        // doc1 has metadata
+        let cached_doc1 = cached
+            .iter()
+            .find(|cd| cd.doc_type == doc1)
+            .unwrap();
+        assert!(cached_doc1.metadata.is_some());
+
+        // doc2 doesn't have metadata
+        let cached_doc2 = cached
+            .iter()
+            .find(|cd| cd.doc_type == doc2)
+            .unwrap();
+        assert!(cached_doc2.metadata.is_none());
+    }
+
+    #[test]
+    fn test_metadata_missing() {
+        let (cache, _temp) = test_cache();
+        let doc = DocumentType::Rfc(9000);
+
+        cache
+            .store_document(&doc, Format::Text, "test")
+            .unwrap();
+
+        // Should return None for missing metadata
+        assert!(cache.get_metadata(&doc).is_none());
     }
 }

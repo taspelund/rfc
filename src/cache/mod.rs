@@ -1,3 +1,5 @@
+mod metadata;
 mod storage;
 
-pub use storage::CacheManager;
+pub use metadata::CacheMetadata;
+pub use storage::{CachedDocument, CacheManager};
