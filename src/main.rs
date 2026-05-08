@@ -232,35 +232,28 @@ fn html_to_text(html: &str) -> String {
 ///
 /// With --open-with <PROGRAM>: use that specific program
 fn open_in_viewer(text: &str, open_with: Option<&str>) -> Result<()> {
-    // Determine the viewer to use
-    let viewer = match open_with {
+    let viewer_str = match open_with {
         Some(program) => program.to_string(),
         None => {
-            // Default: EDITOR -> PAGER -> don't open
             if let Ok(editor) = env::var("EDITOR") {
                 editor
             } else if let Ok(pager) = env::var("PAGER") {
                 pager
             } else {
-                return Ok(()); // No viewer available, just return
+                return Ok(());
             }
         }
     };
 
-    // Detect if this is a pager-like program
-    let is_pager = viewer == "less"
-        || viewer == "more"
-        || viewer == "most"
-        || viewer.contains("less")
-        || viewer.contains("more")
-        || viewer.ends_with("pager");
+    let (program, extra_args) = split_viewer_command(&viewer_str)
+        .with_context(|| format!("Empty viewer command: {:?}", viewer_str))?;
 
-    if is_pager {
-        // Pipe to pager
-        let mut child = Command::new(&viewer)
+    if is_pager_program(&program) {
+        let mut child = Command::new(&program)
+            .args(&extra_args)
             .stdin(Stdio::piped())
             .spawn()
-            .with_context(|| format!("Failed to start pager: {}", viewer))?;
+            .with_context(|| format!("Failed to start pager: {}", program))?;
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(text.as_bytes())?;
@@ -268,15 +261,15 @@ fn open_in_viewer(text: &str, open_with: Option<&str>) -> Result<()> {
 
         child.wait()?;
     } else {
-        // Write to temp file for editor
         let mut temp_file = tempfile::NamedTempFile::new()?;
         temp_file.write_all(text.as_bytes())?;
         temp_file.flush()?;
 
-        let status = Command::new(&viewer)
+        let status = Command::new(&program)
+            .args(&extra_args)
             .arg(temp_file.path())
             .status()
-            .with_context(|| format!("Failed to start editor: {}", viewer))?;
+            .with_context(|| format!("Failed to start editor: {}", program))?;
 
         if !status.success() {
             anyhow::bail!("Editor exited with non-zero status");
@@ -284,6 +277,24 @@ fn open_in_viewer(text: &str, open_with: Option<&str>) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Split a viewer command string into `(program, args)` on whitespace.
+/// Returns `None` if the string is empty/whitespace-only.
+fn split_viewer_command(s: &str) -> Option<(String, Vec<String>)> {
+    let mut parts = s.split_whitespace().map(String::from);
+    let program = parts.next()?;
+    Some((program, parts.collect()))
+}
+
+/// True when `program` is a known pager that reads stdin.
+/// Matches the basename only, so `/usr/bin/less` and `less` both qualify.
+fn is_pager_program(program: &str) -> bool {
+    let basename = std::path::Path::new(program)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(program);
+    matches!(basename, "less" | "more" | "most" | "pg")
 }
 
 /// Search for documents
@@ -401,6 +412,24 @@ fn list_cache(wide: bool) -> Result<()> {
     Ok(())
 }
 
+/// Sum the sizes of all regular files under `dir`, recursively.
+fn dir_size_recursive(dir: &std::path::Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(&d)? {
+            let entry = entry?;
+            let ft = entry.file_type()?;
+            if ft.is_dir() {
+                stack.push(entry.path());
+            } else if ft.is_file() {
+                total += entry.metadata()?.len();
+            }
+        }
+    }
+    Ok(total)
+}
+
 /// Truncate title to a maximum width
 fn truncate_title(title: &str, max_width: usize) -> String {
     if max_width == usize::MAX || title.chars().count() <= max_width {
@@ -428,14 +457,7 @@ fn cache_info() -> Result<()> {
     println!("Cache directory: {}", path.display());
     println!("Cached documents: {}", cached.len());
 
-    // Calculate total size
-    if let Ok(entries) = std::fs::read_dir(path) {
-        let total_size: u64 = entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.metadata().ok())
-            .map(|m| m.len())
-            .sum();
-
+    if let Ok(total_size) = dir_size_recursive(path) {
         let size_str = if total_size < 1024 {
             format!("{} B", total_size)
         } else if total_size < 1024 * 1024 {

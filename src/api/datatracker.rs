@@ -161,8 +161,6 @@ impl DataTrackerClient {
             .take(limit as usize)
             .collect();
 
-        let returned_count = documents.len() as u32;
-
         // The API's total_count reflects all server-side filters (title,
         // abstract, type) — it's accurate when we have no further local
         // filtering to do. With 3+ tokens we filter locally too, so drop it.
@@ -174,7 +172,7 @@ impl DataTrackerClient {
 
         Ok(SearchResult {
             documents,
-            has_more: search_response.meta.next.is_some() || returned_count == limit,
+            has_more: search_response.meta.next.is_some(),
             total_count,
             query: query.to_string(),
             filter,
