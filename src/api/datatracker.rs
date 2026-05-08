@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
@@ -46,15 +44,14 @@ struct ApiDocument {
 }
 
 impl DataTrackerClient {
-    /// Create a new DataTracker API client
+    /// Create a new DataTracker API client with its own HTTP client.
     pub fn new() -> Result<Self> {
-        Ok(Self {
-            client: Client::builder()
-                .user_agent(concat!("rfc-cli/", env!("CARGO_PKG_VERSION")))
-                .timeout(Duration::from_secs(30))
-                .build()
-                .context("Failed to create HTTP client")?,
-        })
+        Ok(Self::with_client(super::build_http_client()?))
+    }
+
+    /// Create a new DataTracker API client backed by an existing HTTP client.
+    pub fn with_client(client: Client) -> Self {
+        Self { client }
     }
 
     /// Search for documents matching the query.
@@ -157,7 +154,7 @@ impl DataTrackerClient {
             .into_iter()
             .filter(|doc| Self::is_rfc_or_draft(&doc.name))
             .filter(matches_extra_tokens)
-            .map(|doc| self.convert_api_document(doc))
+            .map(Document::from)
             .take(limit as usize)
             .collect();
 
@@ -184,29 +181,6 @@ impl DataTrackerClient {
         name.starts_with("rfc") || name.starts_with("draft-")
     }
 
-    /// Convert an API document to our Document model
-    fn convert_api_document(&self, doc: ApiDocument) -> Document {
-        let doc_type = self.parse_doc_type(&doc.name);
-        let published = doc.time.as_ref().and_then(|t| {
-            chrono::DateTime::parse_from_rfc3339(t)
-                .ok()
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-        });
-
-        Document {
-            name: doc.name.clone(),
-            title: doc.title,
-            doc_type,
-            abstract_text: doc.abstract_text,
-            pages: doc.pages,
-            published,
-            status: doc.std_level,
-            authors: doc.authors,
-            stream: doc.stream,
-            wg: None,
-        }
-    }
-
     /// Get a single document by name
     pub async fn get_document(&self, name: &str) -> Result<Document> {
         let url = format!(
@@ -230,31 +204,30 @@ impl DataTrackerClient {
             .await
             .context("Failed to parse document metadata")?;
 
-        Ok(self.convert_api_document(api_doc))
-    }
-
-    /// Parse document type from name
-    fn parse_doc_type(&self, name: &str) -> DocumentType {
-        if let Some(num_str) = name.strip_prefix("rfc") {
-            if let Ok(num) = num_str.parse::<u32>() {
-                return DocumentType::Rfc(num);
-            }
-        }
-        DocumentType::Draft(name.to_string())
+        Ok(api_doc.into())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+impl From<ApiDocument> for Document {
+    fn from(doc: ApiDocument) -> Self {
+        let doc_type = DocumentType::from_canonical_name(&doc.name);
+        let published = doc.time.as_ref().and_then(|t| {
+            chrono::DateTime::parse_from_rfc3339(t)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+        });
 
-    #[test]
-    fn test_parse_doc_type() {
-        let client = DataTrackerClient::new().unwrap();
-        assert_eq!(client.parse_doc_type("rfc9000"), DocumentType::Rfc(9000));
-        assert_eq!(
-            client.parse_doc_type("draft-ietf-quic-transport-34"),
-            DocumentType::Draft("draft-ietf-quic-transport-34".to_string())
-        );
+        Document {
+            name: doc.name,
+            title: doc.title,
+            doc_type,
+            abstract_text: doc.abstract_text,
+            pages: doc.pages,
+            published,
+            status: doc.std_level,
+            authors: doc.authors,
+            stream: doc.stream,
+            wg: None,
+        }
     }
 }

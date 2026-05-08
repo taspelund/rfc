@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
@@ -18,15 +16,14 @@ pub struct DocumentFetcher {
 }
 
 impl DocumentFetcher {
-    /// Create a new RFC Editor client
+    /// Create a new document fetcher with its own HTTP client.
     pub fn new() -> Result<Self> {
-        Ok(Self {
-            client: Client::builder()
-                .user_agent(concat!("rfc-cli/", env!("CARGO_PKG_VERSION")))
-                .timeout(Duration::from_secs(30))
-                .build()
-                .context("Failed to create HTTP client")?,
-        })
+        Ok(Self::with_client(super::build_http_client()?))
+    }
+
+    /// Create a new document fetcher backed by an existing HTTP client.
+    pub fn with_client(client: Client) -> Self {
+        Self { client }
     }
 
     /// Fetch document in the preferred format (text first, fallback to HTML)

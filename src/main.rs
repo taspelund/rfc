@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::env;
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 use rfc::{
     CacheManager, CacheMetadata, DataTrackerClient, DocumentFetcher, DocumentType, Format,
@@ -112,26 +112,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Parse document identifier into DocumentType
-fn parse_document(doc: &str) -> Result<DocumentType> {
-    // First try the standard parser
-    if let Some(doc_type) = DocumentType::parse(doc) {
-        return Ok(doc_type);
-    }
-
-    // If standard parsing failed, assume it's a draft name without the prefix
-    let draft_name = if doc.starts_with("draft-") {
-        doc.to_string()
-    } else {
-        format!("draft-{}", doc)
-    };
-
-    Ok(DocumentType::Draft(draft_name))
-}
-
 /// View a document, optionally refreshing from API
 async fn view_document(document: &str, open_with: Option<&str>, refresh: bool) -> Result<()> {
-    let doc_type = parse_document(document)?;
+    let doc_type = DocumentType::from_user_input(document);
     let cache = CacheManager::new()?;
     let rfc_editor = DocumentFetcher::new()?;
 
@@ -155,7 +138,7 @@ async fn view_document(document: &str, open_with: Option<&str>, refresh: bool) -
 
 /// Fetch a document and cache it without opening
 async fn fetch_only_document(document: &str) -> Result<()> {
-    let doc_type = parse_document(document)?;
+    let doc_type = DocumentType::from_user_input(document);
     let cache = CacheManager::new()?;
     let rfc_editor = DocumentFetcher::new()?;
 
@@ -248,32 +231,18 @@ fn open_in_viewer(text: &str, open_with: Option<&str>) -> Result<()> {
     let (program, extra_args) = split_viewer_command(&viewer_str)
         .with_context(|| format!("Empty viewer command: {:?}", viewer_str))?;
 
-    if is_pager_program(&program) {
-        let mut child = Command::new(&program)
-            .args(&extra_args)
-            .stdin(Stdio::piped())
-            .spawn()
-            .with_context(|| format!("Failed to start pager: {}", program))?;
+    let mut temp_file = tempfile::NamedTempFile::new()?;
+    temp_file.write_all(text.as_bytes())?;
+    temp_file.flush()?;
 
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(text.as_bytes())?;
-        }
+    let status = Command::new(&program)
+        .args(&extra_args)
+        .arg(temp_file.path())
+        .status()
+        .with_context(|| format!("Failed to start viewer: {}", program))?;
 
-        child.wait()?;
-    } else {
-        let mut temp_file = tempfile::NamedTempFile::new()?;
-        temp_file.write_all(text.as_bytes())?;
-        temp_file.flush()?;
-
-        let status = Command::new(&program)
-            .args(&extra_args)
-            .arg(temp_file.path())
-            .status()
-            .with_context(|| format!("Failed to start editor: {}", program))?;
-
-        if !status.success() {
-            anyhow::bail!("Editor exited with non-zero status");
-        }
+    if !status.success() {
+        anyhow::bail!("Viewer exited with non-zero status");
     }
 
     Ok(())
@@ -285,16 +254,6 @@ fn split_viewer_command(s: &str) -> Option<(String, Vec<String>)> {
     let mut parts = s.split_whitespace().map(String::from);
     let program = parts.next()?;
     Some((program, parts.collect()))
-}
-
-/// True when `program` is a known pager that reads stdin.
-/// Matches the basename only, so `/usr/bin/less` and `less` both qualify.
-fn is_pager_program(program: &str) -> bool {
-    let basename = std::path::Path::new(program)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(program);
-    matches!(basename, "less" | "more" | "most" | "pg")
 }
 
 /// Search for documents
@@ -475,7 +434,7 @@ fn cache_info() -> Result<()> {
 /// Remove a document from cache
 fn uncache_document(document: &str) -> Result<()> {
     let cache = CacheManager::new()?;
-    let doc_type = parse_document(document)?;
+    let doc_type = DocumentType::from_user_input(document);
 
     if cache.remove(&doc_type)? {
         println!("Removed {} from cache", doc_type);

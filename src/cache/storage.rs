@@ -112,10 +112,9 @@ impl CacheManager {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    if let Some(doc_type) = DocumentType::parse(stem) {
-                        if !documents.contains(&doc_type) {
-                            documents.push(doc_type);
-                        }
+                    let doc_type = DocumentType::from_canonical_name(stem);
+                    if !documents.contains(&doc_type) {
+                        documents.push(doc_type);
                     }
                 }
             }
