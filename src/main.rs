@@ -24,7 +24,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Fetch a document from the API and cache it without opening it
-    Fetch { document: String },
+    Fetch {
+        /// RFC number or draft name to fetch
+        document: String,
+    },
 
     /// Search the IETF Datatracker
     Search(SearchArgs),
@@ -83,7 +86,10 @@ enum CacheCmd {
     /// Show cache location and total size
     Info,
     /// Remove a single document from the cache
-    Remove { document: String },
+    Remove {
+        /// RFC number or draft name to remove
+        document: String,
+    },
     /// Remove every cached document
     Clear,
 }

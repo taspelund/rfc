@@ -6,12 +6,12 @@ use crate::models::{Document, DocumentType, SearchFilter, SearchResult};
 
 const DATATRACKER_BASE_URL: &str = "https://datatracker.ietf.org";
 
-/// Client for the IETF Datatracker API
+/// Client for the IETF Datatracker REST API. Used for search and for
+/// metadata lookups (titles, draft revisions).
 pub struct DataTrackerClient {
     client: Client,
 }
 
-/// Response from the Datatracker document search API
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
     meta: SearchMeta,
@@ -41,30 +41,30 @@ struct ApiDocument {
 }
 
 impl DataTrackerClient {
-    /// Create a new DataTracker API client with its own HTTP client.
+    /// Build a client with a freshly-constructed HTTP client.
     pub fn new() -> Result<Self> {
         Ok(Self::with_client(super::build_http_client()?))
     }
 
-    /// Create a new DataTracker API client backed by an existing HTTP client.
+    /// Build a client that reuses an existing HTTP client.
     pub fn with_client(client: Client) -> Self {
         Self { client }
     }
 
     /// Search for documents matching the query.
     ///
-    /// The query is tokenized on whitespace and pushed to the server as much
-    /// as possible:
+    /// The query is tokenized on whitespace and pushed to the server as
+    /// much as possible:
     ///
     /// - the longest token becomes a `title__icontains` filter,
     /// - the second-longest (if any) becomes an `abstract__icontains` filter,
-    /// - `type__in=rfc,draft` (or the user's explicit `--rfc`/`--draft`)
-    ///   ensures we don't waste payload on slides, agendas, charters, etc.
+    /// - `type__in` honors the caller's `SearchFilter`, defaulting to
+    ///   `rfc,draft` so the response doesn't include slides, charters, etc.
     ///
-    /// Any remaining (3rd+) tokens are AND-ed locally against title+abstract.
-    /// This makes word-order-independent searches like "bgp message" work
-    /// without the user having to guess the exact phrase, while keeping the
-    /// JSON payload (and latency) small.
+    /// Any remaining (3rd+) tokens are AND-ed locally against
+    /// title+abstract. This makes queries like "bgp message" work without
+    /// the user having to guess the exact phrase, while keeping the JSON
+    /// payload (and latency) small.
     pub async fn search(
         &self,
         query: &str,
@@ -173,12 +173,11 @@ impl DataTrackerClient {
         })
     }
 
-    /// Check if a document name is an RFC or Internet-Draft
     fn is_rfc_or_draft(name: &str) -> bool {
         name.starts_with("rfc") || name.starts_with("draft-")
     }
 
-    /// Get a single document by name
+    /// Fetch a single document's metadata by canonical name.
     pub async fn get_document(&self, name: &str) -> Result<Document> {
         let url = format!(
             "{}/api/v1/doc/document/{}/?format=json",

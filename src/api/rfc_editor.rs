@@ -4,38 +4,44 @@ use serde::Deserialize;
 
 use crate::models::{DocumentType, Format};
 
-/// Response from datatracker document API
 #[derive(Debug, Deserialize)]
 struct DraftInfo {
     rev: Option<String>,
 }
 
-/// Client for fetching RFC and draft content
+/// Fetches RFC and draft document content (HTML or plain text).
+///
+/// Talks primarily to rfc-editor.org and ietf.org/archive, with a side
+/// trip to datatracker.ietf.org to resolve `-NN` version suffixes for
+/// drafts the user supplied unversioned.
 pub struct DocumentFetcher {
     client: Client,
 }
 
 impl DocumentFetcher {
-    /// Create a new document fetcher with its own HTTP client.
+    /// Build a fetcher with a freshly-constructed HTTP client.
     pub fn new() -> Result<Self> {
         Ok(Self::with_client(super::build_http_client()?))
     }
 
-    /// Create a new document fetcher backed by an existing HTTP client.
+    /// Build a fetcher that reuses an existing HTTP client. Lets a single
+    /// client back both this and `DataTrackerClient` so we don't pay for
+    /// two connection pools per command invocation.
     pub fn with_client(client: Client) -> Self {
         Self { client }
     }
 
-    /// Fetch document in the preferred format (text first, fallback to HTML)
+    /// Fetch a document, preferring plain text and falling back to HTML.
+    ///
+    /// Drafts without a version suffix are resolved to their latest
+    /// revision via datatracker before fetching.
     pub async fn fetch(&self, doc: &DocumentType) -> Result<(String, Format)> {
         let doc = self.resolve_draft_version(doc).await?;
 
-        // Try text first
         let text_url = self.text_url(&doc);
         match self.fetch_content(&text_url).await {
             Ok(content) => Ok((content, Format::Text)),
             Err(text_err) => {
-                // Fallback to HTML
                 let html_url = self.html_url(&doc);
                 let content = self.fetch_content(&html_url).await.with_context(|| {
                     format!(
@@ -48,17 +54,16 @@ impl DocumentFetcher {
         }
     }
 
-    /// Resolve a draft name to include its version number if missing
+    /// Resolve a draft name to include its latest version suffix.
+    /// RFCs and already-versioned drafts pass through unchanged.
     async fn resolve_draft_version(&self, doc: &DocumentType) -> Result<DocumentType> {
         match doc {
             DocumentType::Rfc(_) => Ok(doc.clone()),
             DocumentType::Draft(name) => {
-                // Check if already has a version number (ends with -NN)
                 if Self::has_version_suffix(name) {
                     return Ok(doc.clone());
                 }
 
-                // Query datatracker for the latest version
                 let url = format!("https://datatracker.ietf.org/doc/{}/doc.json", name);
                 let response = self
                     .client
@@ -84,9 +89,10 @@ impl DocumentFetcher {
         }
     }
 
-    /// Check if a draft name already has a version suffix (e.g., -06, -12)
+    /// True when `name` ends in `-` followed by ASCII digits (e.g. `-06`,
+    /// `-123456`). Used to detect whether a draft name is already pinned
+    /// to a specific revision.
     fn has_version_suffix(name: &str) -> bool {
-        // Look for pattern like -NN at the end where NN is digits
         if let Some(last_dash) = name.rfind('-') {
             let suffix = &name[last_dash + 1..];
             !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit())
@@ -95,7 +101,7 @@ impl DocumentFetcher {
         }
     }
 
-    /// Get the HTML URL for a document
+    /// HTML URL for a document.
     pub fn html_url(&self, doc: &DocumentType) -> String {
         match doc {
             DocumentType::Rfc(num) => {
@@ -107,7 +113,7 @@ impl DocumentFetcher {
         }
     }
 
-    /// Get the plain text URL for a document
+    /// Plain-text URL for a document.
     pub fn text_url(&self, doc: &DocumentType) -> String {
         match doc {
             DocumentType::Rfc(num) => {
@@ -119,7 +125,6 @@ impl DocumentFetcher {
         }
     }
 
-    /// Fetch content from a URL
     async fn fetch_content(&self, url: &str) -> Result<String> {
         let response = self
             .client
