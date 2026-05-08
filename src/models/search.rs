@@ -41,17 +41,6 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    /// Create an empty search result
-    pub fn empty(query: String, filter: SearchFilter) -> Self {
-        Self {
-            documents: Vec::new(),
-            has_more: false,
-            total_count: None,
-            query,
-            filter,
-        }
-    }
-
     /// Check if this result set is empty
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -79,17 +68,6 @@ mod tests {
     #[test]
     fn test_search_filter_default() {
         assert_eq!(SearchFilter::default(), SearchFilter::Both);
-    }
-
-    #[test]
-    fn test_search_result_empty() {
-        let result = SearchResult::empty("test query".to_string(), SearchFilter::RfcsOnly);
-
-        assert!(result.is_empty());
-        assert_eq!(result.len(), 0);
-        assert!(!result.has_more);
-        assert_eq!(result.query, "test query");
-        assert_eq!(result.filter, SearchFilter::RfcsOnly);
     }
 
     #[test]

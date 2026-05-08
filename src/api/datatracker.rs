@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
@@ -8,12 +6,12 @@ use crate::models::{Document, DocumentType, SearchFilter, SearchResult};
 
 const DATATRACKER_BASE_URL: &str = "https://datatracker.ietf.org";
 
-/// Client for the IETF Datatracker API
+/// Client for the IETF Datatracker REST API. Used for search and for
+/// metadata lookups (titles, draft revisions).
 pub struct DataTrackerClient {
     client: Client,
 }
 
-/// Response from the Datatracker document search API
 #[derive(Debug, Deserialize)]
 struct SearchResponse {
     meta: SearchMeta,
@@ -28,49 +26,45 @@ struct SearchMeta {
     next: Option<String>,
 }
 
-/// Document as returned by the Datatracker API
+/// Document as returned by the Datatracker API.
+///
+/// Only the fields the CLI consumes are deserialized; the API returns a
+/// great deal more (pages, authors, timestamps, etc.) that we ignore.
+/// `abstract_text` is read by the multi-token local filter in `search`,
+/// not stored on `Document`.
 #[derive(Debug, Deserialize)]
 struct ApiDocument {
     name: String,
     title: String,
     #[serde(rename = "abstract")]
     abstract_text: Option<String>,
-    pages: Option<u32>,
-    #[serde(rename = "time")]
-    time: Option<String>,
-    #[serde(rename = "std_level")]
-    std_level: Option<String>,
-    stream: Option<String>,
-    #[serde(default)]
-    authors: Vec<String>,
 }
 
 impl DataTrackerClient {
-    /// Create a new DataTracker API client
+    /// Build a client with a freshly-constructed HTTP client.
     pub fn new() -> Result<Self> {
-        Ok(Self {
-            client: Client::builder()
-                .user_agent(concat!("rfc-cli/", env!("CARGO_PKG_VERSION")))
-                .timeout(Duration::from_secs(30))
-                .build()
-                .context("Failed to create HTTP client")?,
-        })
+        Ok(Self::with_client(super::build_http_client()?))
+    }
+
+    /// Build a client that reuses an existing HTTP client.
+    pub fn with_client(client: Client) -> Self {
+        Self { client }
     }
 
     /// Search for documents matching the query.
     ///
-    /// The query is tokenized on whitespace and pushed to the server as much
-    /// as possible:
+    /// The query is tokenized on whitespace and pushed to the server as
+    /// much as possible:
     ///
     /// - the longest token becomes a `title__icontains` filter,
     /// - the second-longest (if any) becomes an `abstract__icontains` filter,
-    /// - `type__in=rfc,draft` (or the user's explicit `--rfc`/`--draft`)
-    ///   ensures we don't waste payload on slides, agendas, charters, etc.
+    /// - `type__in` honors the caller's `SearchFilter`, defaulting to
+    ///   `rfc,draft` so the response doesn't include slides, charters, etc.
     ///
-    /// Any remaining (3rd+) tokens are AND-ed locally against title+abstract.
-    /// This makes word-order-independent searches like "bgp message" work
-    /// without the user having to guess the exact phrase, while keeping the
-    /// JSON payload (and latency) small.
+    /// Any remaining (3rd+) tokens are AND-ed locally against
+    /// title+abstract. This makes queries like "bgp message" work without
+    /// the user having to guess the exact phrase, while keeping the JSON
+    /// payload (and latency) small.
     pub async fn search(
         &self,
         query: &str,
@@ -157,11 +151,9 @@ impl DataTrackerClient {
             .into_iter()
             .filter(|doc| Self::is_rfc_or_draft(&doc.name))
             .filter(matches_extra_tokens)
-            .map(|doc| self.convert_api_document(doc))
+            .map(Document::from)
             .take(limit as usize)
             .collect();
-
-        let returned_count = documents.len() as u32;
 
         // The API's total_count reflects all server-side filters (title,
         // abstract, type) — it's accurate when we have no further local
@@ -174,42 +166,18 @@ impl DataTrackerClient {
 
         Ok(SearchResult {
             documents,
-            has_more: search_response.meta.next.is_some() || returned_count == limit,
+            has_more: search_response.meta.next.is_some(),
             total_count,
             query: query.to_string(),
             filter,
         })
     }
 
-    /// Check if a document name is an RFC or Internet-Draft
     fn is_rfc_or_draft(name: &str) -> bool {
         name.starts_with("rfc") || name.starts_with("draft-")
     }
 
-    /// Convert an API document to our Document model
-    fn convert_api_document(&self, doc: ApiDocument) -> Document {
-        let doc_type = self.parse_doc_type(&doc.name);
-        let published = doc.time.as_ref().and_then(|t| {
-            chrono::DateTime::parse_from_rfc3339(t)
-                .ok()
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-        });
-
-        Document {
-            name: doc.name.clone(),
-            title: doc.title,
-            doc_type,
-            abstract_text: doc.abstract_text,
-            pages: doc.pages,
-            published,
-            status: doc.std_level,
-            authors: doc.authors,
-            stream: doc.stream,
-            wg: None,
-        }
-    }
-
-    /// Get a single document by name
+    /// Fetch a single document's metadata by canonical name.
     pub async fn get_document(&self, name: &str) -> Result<Document> {
         let url = format!(
             "{}/api/v1/doc/document/{}/?format=json",
@@ -232,31 +200,17 @@ impl DataTrackerClient {
             .await
             .context("Failed to parse document metadata")?;
 
-        Ok(self.convert_api_document(api_doc))
-    }
-
-    /// Parse document type from name
-    fn parse_doc_type(&self, name: &str) -> DocumentType {
-        if let Some(num_str) = name.strip_prefix("rfc") {
-            if let Ok(num) = num_str.parse::<u32>() {
-                return DocumentType::Rfc(num);
-            }
-        }
-        DocumentType::Draft(name.to_string())
+        Ok(api_doc.into())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_doc_type() {
-        let client = DataTrackerClient::new().unwrap();
-        assert_eq!(client.parse_doc_type("rfc9000"), DocumentType::Rfc(9000));
-        assert_eq!(
-            client.parse_doc_type("draft-ietf-quic-transport-34"),
-            DocumentType::Draft("draft-ietf-quic-transport-34".to_string())
-        );
+impl From<ApiDocument> for Document {
+    fn from(doc: ApiDocument) -> Self {
+        let doc_type = DocumentType::from_canonical_name(&doc.name);
+        Document {
+            name: doc.name,
+            title: doc.title,
+            doc_type,
+        }
     }
 }
