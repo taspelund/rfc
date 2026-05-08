@@ -156,8 +156,7 @@ impl CacheManager {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).context("Failed to create metadata directory")?;
         }
-        let content = serde_json::to_string_pretty(meta)
-            .context("Failed to serialize metadata")?;
+        let content = serde_json::to_string_pretty(meta).context("Failed to serialize metadata")?;
         fs::write(path, content).context("Failed to write metadata file")?;
         Ok(())
     }
@@ -309,12 +308,8 @@ mod tests {
         let doc1 = DocumentType::Rfc(9000);
         let doc2 = DocumentType::Rfc(8200);
 
-        cache
-            .store_document(&doc1, Format::Text, "test")
-            .unwrap();
-        cache
-            .store_document(&doc2, Format::Text, "test")
-            .unwrap();
+        cache.store_document(&doc1, Format::Text, "test").unwrap();
+        cache.store_document(&doc2, Format::Text, "test").unwrap();
 
         let meta1 = CacheMetadata {
             title: "QUIC Transport".to_string(),
@@ -326,17 +321,11 @@ mod tests {
         assert_eq!(cached.len(), 2);
 
         // doc1 has metadata
-        let cached_doc1 = cached
-            .iter()
-            .find(|cd| cd.doc_type == doc1)
-            .unwrap();
+        let cached_doc1 = cached.iter().find(|cd| cd.doc_type == doc1).unwrap();
         assert!(cached_doc1.metadata.is_some());
 
         // doc2 doesn't have metadata
-        let cached_doc2 = cached
-            .iter()
-            .find(|cd| cd.doc_type == doc2)
-            .unwrap();
+        let cached_doc2 = cached.iter().find(|cd| cd.doc_type == doc2).unwrap();
         assert!(cached_doc2.metadata.is_none());
     }
 
@@ -345,9 +334,7 @@ mod tests {
         let (cache, _temp) = test_cache();
         let doc = DocumentType::Rfc(9000);
 
-        cache
-            .store_document(&doc, Format::Text, "test")
-            .unwrap();
+        cache.store_document(&doc, Format::Text, "test").unwrap();
 
         // Should return None for missing metadata
         assert!(cache.get_metadata(&doc).is_none());

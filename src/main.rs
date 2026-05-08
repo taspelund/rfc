@@ -4,7 +4,10 @@ use std::env;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use rfc::{CacheManager, CacheMetadata, DataTrackerClient, DocumentFetcher, DocumentType, Format, SearchFilter};
+use rfc::{
+    CacheManager, CacheMetadata, DataTrackerClient, DocumentFetcher, DocumentType, Format,
+    SearchFilter,
+};
 
 #[derive(Parser)]
 #[command(name = "rfc")]
@@ -127,11 +130,7 @@ fn parse_document(doc: &str) -> Result<DocumentType> {
 }
 
 /// View a document, optionally refreshing from API
-async fn view_document(
-    document: &str,
-    open_with: Option<&str>,
-    refresh: bool,
-) -> Result<()> {
+async fn view_document(document: &str, open_with: Option<&str>, refresh: bool) -> Result<()> {
     let doc_type = parse_document(document)?;
     let cache = CacheManager::new()?;
     let rfc_editor = DocumentFetcher::new()?;
@@ -199,10 +198,7 @@ async fn fetch_and_cache(
 }
 
 /// Fetch metadata from Datatracker and store it
-async fn fetch_and_store_metadata(
-    doc_type: &DocumentType,
-    cache: &CacheManager,
-) -> Result<()> {
+async fn fetch_and_store_metadata(doc_type: &DocumentType, cache: &CacheManager) -> Result<()> {
     let client = DataTrackerClient::new()?;
     let doc = client.get_document(&doc_type.name()).await?;
 
@@ -308,21 +304,28 @@ async fn search_documents(query: &str, limit: usize, filter: SearchFilter) -> Re
     // Report results with total count if available
     if let Some(total) = results.total_count {
         if results.has_more {
-            println!("\nShowing {} of {} results. Increase --limit <N> to show more.\n", shown, total);
+            println!(
+                "\nShowing {} of {} results. Increase --limit <N> to show more.\n",
+                shown, total
+            );
         } else {
             println!("\nFound {} results:\n", total);
         }
     } else {
         // Fallback if total count not available
         if results.has_more {
-            println!("\nShowing {} results. Increase --limit <N> to show more.\n", shown);
+            println!(
+                "\nShowing {} results. Increase --limit <N> to show more.\n",
+                shown
+            );
         } else {
             println!("\nFound {} results:\n", shown);
         }
     }
 
     // Calculate max name width for alignment (80 char total line width)
-    let max_name_width = results.documents
+    let max_name_width = results
+        .documents
         .iter()
         .map(|doc| doc.doc_type.name().len())
         .max()
@@ -364,7 +367,11 @@ fn list_cache(wide: bool) -> Result<()> {
 
     // Available width for title: 80 total - name - 2 separator - some margin
     let available_width = 80_usize.saturating_sub(max_name_width).saturating_sub(4);
-    let title_width = if wide { usize::MAX } else { available_width.min(77) };
+    let title_width = if wide {
+        usize::MAX
+    } else {
+        available_width.min(77)
+    };
     let mut missing_count = 0;
 
     for cached_doc in &cached {
@@ -399,10 +406,7 @@ fn truncate_title(title: &str, max_width: usize) -> String {
     if max_width == usize::MAX || title.chars().count() <= max_width {
         title.to_string()
     } else {
-        let truncated: String = title
-            .chars()
-            .take(max_width.saturating_sub(3))
-            .collect();
+        let truncated: String = title.chars().take(max_width.saturating_sub(3)).collect();
         format!("{}...", truncated)
     }
 }

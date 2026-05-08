@@ -17,16 +17,16 @@ const USER_LIMIT: u32 = 25;
 
 /// (query, ground-truth doc name that must appear in results)
 const TEST_QUERIES: &[(&str, &str)] = &[
-    ("bgp message", "rfc8654"),          // original bug case
-    ("extended message", "rfc8654"),     // word order swap
+    ("bgp message", "rfc8654"),      // original bug case
+    ("extended message", "rfc8654"), // word order swap
     ("bgp extended", "rfc4360"),
-    ("quic", "rfc9000"),                 // single token, common
+    ("quic", "rfc9000"), // single token, common
     ("json patch", "rfc6902"),
     ("tcp congestion", "rfc5681"),
     ("tls handshake", "rfc8446"),
-    ("dns over https", "rfc8484"),       // 3 tokens, "over" is noise
+    ("dns over https", "rfc8484"), // 3 tokens, "over" is noise
     ("http caching", "rfc9111"),
-    ("bgp", "rfc4271"),                  // single token, very common
+    ("bgp", "rfc4271"), // single token, very common
 ];
 
 #[derive(Debug, Deserialize)]
@@ -288,7 +288,10 @@ async fn main() -> Result<()> {
         );
         println!(
             "{:<28} {:>10} {:>10} {:>10} {:>10}",
-            format!("  found? (n={})", a.count.max(b.count).max(c.count).max(d.count)),
+            format!(
+                "  found? (n={})",
+                a.count.max(b.count).max(c.count).max(d.count)
+            ),
             mark(a.found),
             mark(b.found),
             mark(c.found),

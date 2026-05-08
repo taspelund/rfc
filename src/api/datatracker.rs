@@ -77,10 +77,7 @@ impl DataTrackerClient {
         filter: SearchFilter,
         limit: u32,
     ) -> Result<SearchResult> {
-        let tokens: Vec<String> = query
-            .split_whitespace()
-            .map(|t| t.to_lowercase())
-            .collect();
+        let tokens: Vec<String> = query.split_whitespace().map(|t| t.to_lowercase()).collect();
 
         // Pick the longest token for the title filter, the second-longest for
         // the abstract filter. Falls back to the raw query when there are no
@@ -216,8 +213,7 @@ impl DataTrackerClient {
     pub async fn get_document(&self, name: &str) -> Result<Document> {
         let url = format!(
             "{}/api/v1/doc/document/{}/?format=json",
-            DATATRACKER_BASE_URL,
-            name
+            DATATRACKER_BASE_URL, name
         );
 
         let response = self

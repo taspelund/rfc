@@ -57,7 +57,8 @@ fn test_metadata_integration() {
 
 #[test]
 fn test_title_truncation() {
-    let long_title = "This is a very long title that should be truncated when displayed in list cache";
+    let long_title =
+        "This is a very long title that should be truncated when displayed in list cache";
 
     // Test truncation with different widths
     let truncated = truncate_title(long_title, 60);
@@ -80,10 +81,7 @@ fn truncate_title(title: &str, max_width: usize) -> String {
     if max_width == usize::MAX || title.chars().count() <= max_width {
         title.to_string()
     } else {
-        let truncated: String = title
-            .chars()
-            .take(max_width.saturating_sub(3))
-            .collect();
+        let truncated: String = title.chars().take(max_width.saturating_sub(3)).collect();
         format!("{}...", truncated)
     }
 }
