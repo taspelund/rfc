@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// The type of document - either an RFC or an Internet-Draft
@@ -90,45 +89,26 @@ impl Format {
     }
 }
 
-/// An IETF document (RFC or Internet-Draft)
+/// An IETF document (RFC or Internet-Draft).
+///
+/// Only the fields the CLI actually displays are kept; richer metadata
+/// (pages, authors, publication date, etc.) lives on the wire type and
+/// is dropped at the API boundary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
-    /// Internal name (e.g., "rfc9000" or "draft-ietf-quic-transport-34")
+    /// Canonical name (e.g. `rfc9000` or `draft-ietf-quic-transport-34`).
     pub name: String,
-    /// Human-readable title
+    /// Human-readable title.
     pub title: String,
-    /// Document type
     pub doc_type: DocumentType,
-    /// Abstract text
-    pub abstract_text: Option<String>,
-    /// Number of pages
-    pub pages: Option<u32>,
-    /// Publication date
-    pub published: Option<DateTime<Utc>>,
-    /// Document status (e.g., "Standards Track", "Informational")
-    pub status: Option<String>,
-    /// List of authors
-    pub authors: Vec<String>,
-    /// Stream (e.g., "IETF", "IAB", "IRTF")
-    pub stream: Option<String>,
-    /// Working group
-    pub wg: Option<String>,
 }
 
 impl Document {
-    /// Create a new document with minimal information
     pub fn new(name: String, title: String, doc_type: DocumentType) -> Self {
         Self {
             name,
             title,
             doc_type,
-            abstract_text: None,
-            pages: None,
-            published: None,
-            status: None,
-            authors: Vec::new(),
-            stream: None,
-            wg: None,
         }
     }
 

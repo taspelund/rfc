@@ -26,21 +26,18 @@ struct SearchMeta {
     next: Option<String>,
 }
 
-/// Document as returned by the Datatracker API
+/// Document as returned by the Datatracker API.
+///
+/// Only the fields the CLI consumes are deserialized; the API returns a
+/// great deal more (pages, authors, timestamps, etc.) that we ignore.
+/// `abstract_text` is read by the multi-token local filter in `search`,
+/// not stored on `Document`.
 #[derive(Debug, Deserialize)]
 struct ApiDocument {
     name: String,
     title: String,
     #[serde(rename = "abstract")]
     abstract_text: Option<String>,
-    pages: Option<u32>,
-    #[serde(rename = "time")]
-    time: Option<String>,
-    #[serde(rename = "std_level")]
-    std_level: Option<String>,
-    stream: Option<String>,
-    #[serde(default)]
-    authors: Vec<String>,
 }
 
 impl DataTrackerClient {
@@ -211,23 +208,10 @@ impl DataTrackerClient {
 impl From<ApiDocument> for Document {
     fn from(doc: ApiDocument) -> Self {
         let doc_type = DocumentType::from_canonical_name(&doc.name);
-        let published = doc.time.as_ref().and_then(|t| {
-            chrono::DateTime::parse_from_rfc3339(t)
-                .ok()
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-        });
-
         Document {
             name: doc.name,
             title: doc.title,
             doc_type,
-            abstract_text: doc.abstract_text,
-            pages: doc.pages,
-            published,
-            status: doc.std_level,
-            authors: doc.authors,
-            stream: doc.stream,
-            wg: None,
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -106,6 +107,7 @@ impl CacheManager {
             return Vec::new();
         }
 
+        let mut seen = HashSet::new();
         let mut documents = Vec::new();
 
         if let Ok(entries) = fs::read_dir(&docs_dir) {
@@ -113,7 +115,7 @@ impl CacheManager {
                 let path = entry.path();
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                     let doc_type = DocumentType::from_canonical_name(stem);
-                    if !documents.contains(&doc_type) {
+                    if seen.insert(doc_type.clone()) {
                         documents.push(doc_type);
                     }
                 }
