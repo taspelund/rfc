@@ -14,8 +14,12 @@ struct Cli {
     document: Option<String>,
 
     /// Program to open the document with (defaults to $EDITOR, then $PAGER)
-    #[arg(short = 'o', long, value_name = "PROGRAM")]
+    #[arg(short = 'o', long, value_name = "PROGRAM", conflicts_with = "web")]
     open_with: Option<String>,
+
+    /// Open document in web browser (IETF Datatracker)
+    #[arg(short = 'w', long, requires = "document")]
+    web: bool,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -116,7 +120,7 @@ async fn main() -> Result<()> {
             CacheCmd::Clear => commands::cache::clear(),
         },
         None => match cli.document {
-            Some(doc) => commands::view::run(&doc, cli.open_with.as_deref()).await,
+            Some(doc) => commands::view::run(&doc, cli.open_with.as_deref(), cli.web).await,
             // arg_required_else_help handles the "no args at all" case.
             None => Ok(()),
         },

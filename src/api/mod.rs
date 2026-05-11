@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use reqwest::Client;
 
-pub use datatracker::DataTrackerClient;
+pub use datatracker::{DataTrackerClient, DATATRACKER_BASE_URL};
 pub use rfc_editor::DocumentFetcher;
 
 /// Build the shared HTTP client used by every API wrapper.

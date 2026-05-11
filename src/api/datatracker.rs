@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::models::{Document, DocumentType, SearchFilter, SearchResult};
 
-const DATATRACKER_BASE_URL: &str = "https://datatracker.ietf.org";
+pub const DATATRACKER_BASE_URL: &str = "https://datatracker.ietf.org";
 
 /// Client for the IETF Datatracker REST API. Used for search and for
 /// metadata lookups (titles, draft revisions).
