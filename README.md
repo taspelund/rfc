@@ -28,7 +28,7 @@ The default command, `rfc <document>`, looks in the local cache first and only h
 ```bash
 rfc 9000                    # RFC 9000 (QUIC)
 rfc rfc9000                 # works with prefix
-rfc RFC 9000                # case-insensitive, space tolerated
+rfc "RFC 9000"              # case-insensitive, space tolerated (quote to keep as one arg)
 rfc draft-ietf-quic-transport       # latest draft version auto-resolved
 rfc draft-ietf-quic-transport-34    # pinned version
 ```
