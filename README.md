@@ -1,5 +1,8 @@
 # rfc
 
+[![crates.io](https://img.shields.io/crates/v/ietf-rfc.svg)](https://crates.io/crates/ietf-rfc)
+[![docs.rs](https://img.shields.io/docsrs/ietf-rfc)](https://docs.rs/ietf-rfc)
+
 A command-line tool to search, retrieve, and display IETF RFCs and Internet-Drafts.
 
 ## Features
