@@ -1,10 +1,22 @@
 [package]
-name = "rfc"
+name = "ietf-rfc"
 version = "0.1.0"
 edition = "2021"
 description = "A CLI tool to search, retrieve, and display IETF RFCs and drafts"
 license = "BSD-3-Clause"
 authors = ["Trey Aspelund"]
+repository = "https://github.com/treyaspelund/rfc"
+readme = "README.md"
+keywords = ["rfc", "ietf", "cli", "networking"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "rfc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rfc"
+path = "src/main.rs"
 
 [dependencies]
 # CLI argument parsing

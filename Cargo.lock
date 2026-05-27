@@ -742,6 +742,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ietf-rfc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "directories",
+ "html2text",
+ "opener",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-test",
+ "urlencoding",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1276,25 +1295,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "rfc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "directories",
- "html2text",
- "opener",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-test",
- "urlencoding",
 ]
 
 [[package]]
