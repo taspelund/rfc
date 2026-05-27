@@ -13,8 +13,18 @@ A command-line tool to search, retrieve, and display IETF RFCs and Internet-Draf
 
 Requires Rust. If you don't have it, see [rustup.rs](https://rustup.rs/).
 
+From crates.io:
+
 ```bash
-git clone https://github.com/your-username/rfc.git
+cargo install ietf-rfc
+```
+
+The installed binary is named `rfc`.
+
+From source:
+
+```bash
+git clone https://github.com/treyaspelund/rfc.git
 cd rfc
 cargo install --path .
 ```
