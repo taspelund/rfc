@@ -12,22 +12,22 @@ use anyhow::{Context, Result};
 
 /// Open `text` in a viewer.
 ///
-/// Resolution order when `open_with` is `None`: `$EDITOR` → `$PAGER` →
-/// no-op. The no-op case (neither var set, no `--open-with`) lets `rfc
-/// fetch` work on headless systems without forcing the user to invent a
-/// viewer.
+/// Resolution order when `open_with` is `None`:
+///   `$VISUAL` → `$EDITOR` → `$PAGER` → platform default → no-op
+///
+/// The no-op case (no env vars set, no `--open-with`, no platform default)
+/// lets `rfc fetch` work on headless systems without forcing the user to
+/// invent a viewer.
+///
+/// On Windows the last-resort platform default is `notepad.exe`, which is
+/// always available.  On Unix there is no universal default.
 pub fn open(text: &str, open_with: Option<&str>) -> Result<()> {
     let viewer_str = match open_with {
         Some(program) => program.to_string(),
-        None => {
-            if let Ok(editor) = env::var("EDITOR") {
-                editor
-            } else if let Ok(pager) = env::var("PAGER") {
-                pager
-            } else {
-                return Ok(());
-            }
-        }
+        None => match resolve_viewer() {
+            Some(v) => v,
+            None => return Ok(()),
+        },
     };
 
     let (program, extra_args) = split_command(&viewer_str)
@@ -50,12 +50,104 @@ pub fn open(text: &str, open_with: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Split a viewer command string into `(program, args)` on whitespace.
+/// Resolve a viewer from environment variables, following the POSIX convention
+/// (`VISUAL` before `EDITOR`) used by git, gh, starship, and most CLI tools.
+/// Falls back to a platform-specific default when no env var is set.
+fn resolve_viewer() -> Option<String> {
+    env::var("VISUAL")
+        .or_else(|_| env::var("EDITOR"))
+        .or_else(|_| env::var("PAGER"))
+        .ok()
+        .or_else(platform_default_viewer)
+}
+
+/// Platform-specific last-resort viewer.
+/// On Windows `notepad.exe` is always present; on Unix there is no universal
+/// equivalent so we return `None` and let the caller no-op.
+#[cfg(windows)]
+fn platform_default_viewer() -> Option<String> {
+    Some("notepad.exe".to_string())
+}
+
+#[cfg(not(windows))]
+fn platform_default_viewer() -> Option<String> {
+    None
+}
+
+/// Split a viewer command string into `(program, args)`.
+///
+/// Quoting rules differ by platform:
+///
+/// - **Unix**: backslash escapes, single quotes, and double quotes are all
+///   honoured (standard shell tokenisation).
+/// - **Windows**: only double quotes group tokens; backslash and single quote
+///   are treated as ordinary characters so that Windows paths like
+///   `C:\Program Files\editor.exe` are not mangled.
+///
 /// Returns `None` when the input is empty/whitespace-only.
 fn split_command(s: &str) -> Option<(String, Vec<String>)> {
-    let mut parts = s.split_whitespace().map(String::from);
-    let program = parts.next()?;
-    Some((program, parts.collect()))
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut chars = s.chars().peekable();
+    let mut in_double_quote = false;
+    let mut had_char = false;
+
+    #[cfg(not(windows))]
+    let mut in_single_quote = false;
+
+    while let Some(c) = chars.next() {
+        match c {
+            // Unix only: backslash escapes the next character (except inside
+            // single quotes where everything is literal).
+            #[cfg(not(windows))]
+            '\\' if !in_single_quote => {
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                    had_char = true;
+                }
+            }
+            // Unix only: single quotes — everything inside is literal.
+            #[cfg(not(windows))]
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                had_char = true;
+            }
+            '"' => {
+                #[cfg(not(windows))]
+                if in_single_quote {
+                    current.push('"');
+                    had_char = true;
+                    continue;
+                }
+                in_double_quote = !in_double_quote;
+                had_char = true;
+            }
+            c if c.is_whitespace() && {
+                #[cfg(windows)]
+                { !in_double_quote }
+                #[cfg(not(windows))]
+                { !in_double_quote && !in_single_quote }
+            } => {
+                if had_char {
+                    parts.push(current.clone());
+                    current.clear();
+                    had_char = false;
+                }
+            }
+            c => {
+                current.push(c);
+                had_char = true;
+            }
+        }
+    }
+
+    if had_char {
+        parts.push(current);
+    }
+
+    let mut iter = parts.into_iter();
+    let program = iter.next()?;
+    Some((program, iter.collect()))
 }
 
 #[cfg(test)]
@@ -83,5 +175,77 @@ mod tests {
     fn split_command_empty() {
         assert_eq!(split_command(""), None);
         assert_eq!(split_command("   "), None);
+    }
+
+    #[test]
+    fn split_command_double_quoted_path() {
+        assert_eq!(
+            split_command(r#""/path/to/my program""#),
+            Some(("/path/to/my program".to_string(), vec![]))
+        );
+    }
+
+    #[test]
+    fn split_command_double_quoted_path_with_args() {
+        assert_eq!(
+            split_command(r#""/path/to/my editor" -R"#),
+            Some(("/path/to/my editor".to_string(), vec!["-R".to_string()]))
+        );
+    }
+
+    // Unix-only quoting tests
+    #[cfg(not(windows))]
+    mod unix {
+        use super::*;
+
+        #[test]
+        fn backslash_escaped_space() {
+            assert_eq!(
+                split_command(r"/path/to/my\ program"),
+                Some(("/path/to/my program".to_string(), vec![]))
+            );
+        }
+
+        #[test]
+        fn single_quoted_path() {
+            assert_eq!(
+                split_command("'/path/to/my program'"),
+                Some(("/path/to/my program".to_string(), vec![]))
+            );
+        }
+    }
+
+    // Windows-only quoting tests
+    #[cfg(windows)]
+    mod windows {
+        use super::*;
+
+        #[test]
+        fn backslash_in_path_is_literal() {
+            // Backslashes in Windows paths must not be treated as escapes.
+            assert_eq!(
+                split_command(r"C:\Program Files\editor.exe"),
+                Some((r"C:\Program".to_string(), vec!["Files\\editor.exe".to_string()]))
+            );
+        }
+
+        #[test]
+        fn double_quoted_windows_path() {
+            assert_eq!(
+                split_command(r#""C:\Program Files\editor.exe""#),
+                Some((r"C:\Program Files\editor.exe".to_string(), vec![]))
+            );
+        }
+
+        #[test]
+        fn double_quoted_windows_path_with_args() {
+            assert_eq!(
+                split_command(r#""C:\Program Files\editor.exe" -R"#),
+                Some((
+                    r"C:\Program Files\editor.exe".to_string(),
+                    vec!["-R".to_string()]
+                ))
+            );
+        }
     }
 }
