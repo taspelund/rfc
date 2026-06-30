@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::Deserialize;
@@ -55,13 +57,13 @@ impl DocumentFetcher {
     }
 
     /// Resolve a draft name to include its latest version suffix.
-    /// RFCs and already-versioned drafts pass through unchanged.
-    async fn resolve_draft_version(&self, doc: &DocumentType) -> Result<DocumentType> {
+    /// RFCs and already-versioned drafts pass through unchanged (borrowed).
+    async fn resolve_draft_version<'a>(&self, doc: &'a DocumentType) -> Result<Cow<'a, DocumentType>> {
         match doc {
-            DocumentType::Rfc(_) => Ok(doc.clone()),
+            DocumentType::Rfc(_) => Ok(Cow::Borrowed(doc)),
             DocumentType::Draft(name) => {
                 if Self::has_version_suffix(name) {
-                    return Ok(doc.clone());
+                    return Ok(Cow::Borrowed(doc));
                 }
 
                 let url = format!("https://datatracker.ietf.org/doc/{}/doc.json", name);
@@ -82,8 +84,8 @@ impl DocumentFetcher {
                     .context("Failed to parse draft info")?;
 
                 match info.rev {
-                    Some(rev) => Ok(DocumentType::Draft(format!("{}-{}", name, rev))),
-                    None => Ok(doc.clone()),
+                    Some(rev) => Ok(Cow::Owned(DocumentType::Draft(format!("{}-{}", name, rev)))),
+                    None => Ok(Cow::Borrowed(doc)),
                 }
             }
         }
