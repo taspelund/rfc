@@ -25,7 +25,10 @@ pub async fn run(args: Args) -> Result<()> {
 
     let shown = results.len();
 
-    println!("\n{}\n", format_search_summary(shown, results.total_count, results.has_more));
+    println!(
+        "\n{}\n",
+        format_search_summary(shown, results.total_count, results.has_more)
+    );
 
     let max_name_width = results
         .documents
@@ -54,7 +57,11 @@ pub async fn run(args: Args) -> Result<()> {
 }
 
 /// Format the search results summary line (shown count, total count, "show more" hint).
-pub(crate) fn format_search_summary(shown: usize, total_count: Option<u32>, has_more: bool) -> String {
+pub(crate) fn format_search_summary(
+    shown: usize,
+    total_count: Option<u32>,
+    has_more: bool,
+) -> String {
     let summary = match (total_count, has_more) {
         (Some(total), true) => format!("Showing {} of {} results", shown, total),
         (Some(total), false) => format!("Found {} results", total),
@@ -99,17 +106,11 @@ mod tests {
 
     #[test]
     fn summary_no_total_and_done() {
-        assert_eq!(
-            format_search_summary(5, None, false),
-            "Found 5 results:"
-        );
+        assert_eq!(format_search_summary(5, None, false), "Found 5 results:");
     }
 
     #[test]
     fn summary_zero_results() {
-        assert_eq!(
-            format_search_summary(0, Some(0), false),
-            "Found 0 results:"
-        );
+        assert_eq!(format_search_summary(0, Some(0), false), "Found 0 results:");
     }
 }

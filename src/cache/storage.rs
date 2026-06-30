@@ -433,7 +433,9 @@ mod tests {
         let (cache, _temp) = test_cache();
         // Use a nested path that doesn't exist yet
         let doc = DocumentType::Rfc(9999);
-        cache.store_document(&doc, Format::Text, "deep test").unwrap();
+        cache
+            .store_document(&doc, Format::Text, "deep test")
+            .unwrap();
         let retrieved = cache.get_document(&doc, Format::Text);
         assert_eq!(retrieved, Some("deep test".to_string()));
     }

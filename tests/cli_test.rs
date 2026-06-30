@@ -31,10 +31,7 @@ fn help_succeeds() {
 
 #[test]
 fn no_args_fails() {
-    Command::cargo_bin("rfc")
-        .unwrap()
-        .assert()
-        .failure();
+    Command::cargo_bin("rfc").unwrap().assert().failure();
 }
 
 #[test]

@@ -18,18 +18,16 @@ async fn search_single_token_returns_documents() {
     Mock::given(method("GET"))
         .and(path("/api/v1/doc/document/"))
         .and(query_param("title__icontains", "quic"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                r#"{
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{
                     "meta": { "total_count": 2, "next": null },
                     "objects": [
                         {"name": "rfc9000", "title": "QUIC", "abstract": "Transport"},
                         {"name": "rfc8999", "title": "QUIC Invariant", "abstract": "Invariants"}
                     ]
                 }"#,
-                "application/json",
-            ),
-        )
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
@@ -61,17 +59,18 @@ async fn search_empty_response_returns_empty() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/api/v1/doc/document/"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                r#"{"meta": {"total_count": 0, "next": null}, "objects": []}"#,
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{"meta": {"total_count": 0, "next": null}, "objects": []}"#,
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
     let client = DataTrackerClient::with_client_and_base_url(test_client(), server.uri());
-    let result = client.search("quic", SearchFilter::RfcsOnly, 25).await.unwrap();
+    let result = client
+        .search("quic", SearchFilter::RfcsOnly, 25)
+        .await
+        .unwrap();
 
     assert!(result.is_empty());
 }
@@ -82,17 +81,18 @@ async fn search_type_filter_rfc_sends_type_param() {
     Mock::given(method("GET"))
         .and(path("/api/v1/doc/document/"))
         .and(query_param("type__in", "rfc"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                r#"{"meta": {}, "objects": [{"name": "rfc9000", "title": "QUIC"}]}"#,
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{"meta": {}, "objects": [{"name": "rfc9000", "title": "QUIC"}]}"#,
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
     let client = DataTrackerClient::with_client_and_base_url(test_client(), server.uri());
-    client.search("quic", SearchFilter::RfcsOnly, 25).await.unwrap();
+    client
+        .search("quic", SearchFilter::RfcsOnly, 25)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -101,17 +101,18 @@ async fn search_type_filter_draft_sends_type_param() {
     Mock::given(method("GET"))
         .and(path("/api/v1/doc/document/"))
         .and(query_param("type__in", "draft"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                r#"{"meta": {}, "objects": [{"name": "draft-ietf-quic-00", "title": "QUIC"}]}"#,
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{"meta": {}, "objects": [{"name": "draft-ietf-quic-00", "title": "QUIC"}]}"#,
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
     let client = DataTrackerClient::with_client_and_base_url(test_client(), server.uri());
-    client.search("quic", SearchFilter::DraftsOnly, 25).await.unwrap();
+    client
+        .search("quic", SearchFilter::DraftsOnly, 25)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -123,9 +124,8 @@ async fn search_extra_tokens_filter_locally() {
         .and(path("/api/v1/doc/document/"))
         .and(query_param("title__icontains", "message"))
         .and(query_param("abstract__icontains", "format"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                r#"{
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{
                     "meta": {},
                     "objects": [
                         {"name": "rfc4271", "title": "BGP-4", "abstract": "A message format"},
@@ -133,14 +133,14 @@ async fn search_extra_tokens_filter_locally() {
                         {"name": "rfc2000", "title": "Also no", "abstract": "Nothing"}
                     ]
                 }"#,
-                "application/json",
-            ),
-        )
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
     let client = DataTrackerClient::with_client_and_base_url(test_client(), server.uri());
-    let result = client.search("bgp message format", SearchFilter::RfcsOnly, 25)
+    let result = client
+        .search("bgp message format", SearchFilter::RfcsOnly, 25)
         .await
         .unwrap();
 
@@ -159,12 +159,10 @@ async fn get_document_found_returns_document() {
     Mock::given(method("GET"))
         .and(path("/api/v1/doc/document/rfc9000/"))
         .and(query_param("format", "json"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_raw(
-                r#"{"name": "rfc9000", "title": "QUIC: A UDP-Based Multiplexed and Secure Transport"}"#,
-                "application/json",
-            ),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"{"name": "rfc9000", "title": "QUIC: A UDP-Based Multiplexed and Secure Transport"}"#,
+            "application/json",
+        ))
         .mount(&server)
         .await;
 
@@ -270,10 +268,9 @@ async fn fetch_draft_resolves_version_and_fetches_text() {
     // Draft version resolution: unversioned draft → returns rev "05"
     Mock::given(method("GET"))
         .and(path("/doc/draft-foo/doc.json"))
-        .respond_with(ResponseTemplate::new(200).set_body_raw(
-            r#"{"rev": "05"}"#,
-            "application/json",
-        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(r#"{"rev": "05"}"#, "application/json"),
+        )
         .mount(&server)
         .await;
     // After resolution, fetch text for draft-foo-05.txt

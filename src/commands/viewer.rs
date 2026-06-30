@@ -68,10 +68,7 @@ pub(crate) fn resolve_viewer_from(
     editor: Option<String>,
     pager: Option<String>,
 ) -> Option<String> {
-    visual
-        .or(editor)
-        .or(pager)
-        .or_else(platform_default_viewer)
+    visual.or(editor).or(pager).or_else(platform_default_viewer)
 }
 
 /// Platform-specific last-resort viewer.

@@ -83,7 +83,12 @@ pub(crate) fn format_cache_list(cached: &[CachedDocument], wide: bool) -> Vec<St
         match &cached_doc.metadata {
             Some(meta) => {
                 let title = truncate_str(&meta.title, title_width);
-                lines.push(format!("{:<width$}  {}", name, title, width = max_name_width));
+                lines.push(format!(
+                    "{:<width$}  {}",
+                    name,
+                    title,
+                    width = max_name_width
+                ));
             }
             None => {
                 lines.push(format!(
@@ -138,8 +143,8 @@ fn dir_size_recursive(dir: &std::path::Path) -> std::io::Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use crate::cache::CacheMetadata;
+    use chrono::Utc;
     use tempfile::TempDir;
 
     #[test]
