@@ -61,7 +61,18 @@ impl CacheManager {
     /// Get cached document content
     pub fn get_document(&self, doc: &DocumentType, format: Format) -> Option<String> {
         let path = self.document_path(doc, format);
-        fs::read_to_string(path).ok()
+        match fs::read_to_string(&path) {
+            Ok(s) => Some(s),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to read cached {}: {}",
+                    path.display(),
+                    e
+                );
+                None
+            }
+        }
     }
 
     /// Store document content in cache
@@ -160,7 +171,18 @@ impl CacheManager {
     /// Get cached metadata for a document
     pub fn get_metadata(&self, doc: &DocumentType) -> Option<CacheMetadata> {
         let path = self.metadata_path(doc);
-        let content = fs::read_to_string(path).ok()?;
+        let content = match fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to read cached metadata {}: {}",
+                    path.display(),
+                    e
+                );
+                return None;
+            }
+        };
         serde_json::from_str(&content).ok()
     }
 
