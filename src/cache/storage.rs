@@ -37,9 +37,22 @@ impl CacheManager {
     /// Get the default cache directory
     pub fn default_cache_dir() -> Result<PathBuf> {
         if let Some(proj_dirs) = ProjectDirs::from("", "", "rfc") {
-            Ok(proj_dirs.cache_dir().to_path_buf())
-        } else {
-            // Fallback to home directory
+            return Ok(proj_dirs.cache_dir().to_path_buf());
+        }
+
+        // ProjectDirs::from() only returns None when the home directory cannot
+        // be determined.  Fall back to platform-appropriate env vars.
+        #[cfg(windows)]
+        {
+            // Prefer %LOCALAPPDATA% (e.g. C:\Users\Alice\AppData\Local), then
+            // %USERPROFILE% as a secondary option.
+            let base = std::env::var("LOCALAPPDATA")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .context("Neither LOCALAPPDATA nor USERPROFILE is set")?;
+            Ok(PathBuf::from(base).join("rfc").join("cache"))
+        }
+        #[cfg(not(windows))]
+        {
             let home = std::env::var("HOME").context("HOME not set")?;
             Ok(PathBuf::from(home).join(".cache").join("rfc"))
         }
