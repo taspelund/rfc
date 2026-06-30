@@ -160,6 +160,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn resolve_viewer_visual_takes_precedence() {
+        assert_eq!(
+            resolve_viewer_from(
+                Some("nvim".to_string()),
+                Some("vim".to_string()),
+                Some("less".to_string()),
+            ),
+            Some("nvim".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_viewer_editor_fallback() {
+        assert_eq!(
+            resolve_viewer_from(None, Some("vim".to_string()), Some("less".to_string())),
+            Some("vim".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_viewer_pager_fallback() {
+        assert_eq!(
+            resolve_viewer_from(None, None, Some("less".to_string())),
+            Some("less".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_viewer_all_none_on_unix() {
+        // On Unix platform_default_viewer returns None.
+        #[cfg(not(windows))]
+        assert_eq!(resolve_viewer_from(None, None, None), None);
+        #[cfg(windows)]
+        assert_eq!(
+            resolve_viewer_from(None, None, None),
+            Some("notepad.exe".to_string())
+        );
+    }
+
+    #[test]
     fn split_command_basic() {
         assert_eq!(split_command("vim"), Some(("vim".to_string(), vec![])));
     }
