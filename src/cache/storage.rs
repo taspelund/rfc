@@ -151,14 +151,14 @@ impl CacheManager {
     }
 
     /// Get the path for a cached document
-    fn document_path(&self, doc: &DocumentType, format: Format) -> PathBuf {
+    pub(crate) fn document_path(&self, doc: &DocumentType, format: Format) -> PathBuf {
         self.cache_dir
             .join("documents")
             .join(format!("{}.{}", doc.name(), format.extension()))
     }
 
     /// Get the path for metadata file
-    fn metadata_path(&self, doc: &DocumentType) -> PathBuf {
+    pub(crate) fn metadata_path(&self, doc: &DocumentType) -> PathBuf {
         self.cache_dir
             .join("documents")
             .join(format!("{}.meta", doc.name()))
