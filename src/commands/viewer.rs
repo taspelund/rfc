@@ -54,10 +54,23 @@ pub fn open(text: &str, open_with: Option<&str>) -> Result<()> {
 /// (`VISUAL` before `EDITOR`) used by git, gh, starship, and most CLI tools.
 /// Falls back to a platform-specific default when no env var is set.
 fn resolve_viewer() -> Option<String> {
-    env::var("VISUAL")
-        .or_else(|_| env::var("EDITOR"))
-        .or_else(|_| env::var("PAGER"))
-        .ok()
+    resolve_viewer_from(
+        env::var("VISUAL").ok(),
+        env::var("EDITOR").ok(),
+        env::var("PAGER").ok(),
+    )
+}
+
+/// Pure-function core of [`resolve_viewer`] — takes already-read env vars so
+/// tests don't need to manipulate the real environment.
+pub(crate) fn resolve_viewer_from(
+    visual: Option<String>,
+    editor: Option<String>,
+    pager: Option<String>,
+) -> Option<String> {
+    visual
+        .or(editor)
+        .or(pager)
         .or_else(platform_default_viewer)
 }
 
