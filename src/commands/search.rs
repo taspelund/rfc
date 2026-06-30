@@ -25,23 +25,18 @@ pub async fn run(args: Args) -> Result<()> {
 
     let shown = results.len();
 
-    if let Some(total) = results.total_count {
-        if results.has_more {
-            println!(
-                "\nShowing {} of {} results. Increase --limit <N> to show more.\n",
-                shown, total
-            );
-        } else {
-            println!("\nFound {} results:\n", total);
-        }
-    } else if results.has_more {
-        println!(
-            "\nShowing {} results. Increase --limit <N> to show more.\n",
-            shown
-        );
+    let summary = match (results.total_count, results.has_more) {
+        (Some(total), true) => format!("Showing {} of {} results", shown, total),
+        (Some(total), false) => format!("Found {} results", total),
+        (None, true) => format!("Showing {} results", shown),
+        (None, false) => format!("Found {} results", shown),
+    };
+    let suffix = if results.has_more {
+        ". Increase --limit <N> to show more"
     } else {
-        println!("\nFound {} results:\n", shown);
-    }
+        ":"
+    };
+    println!("\n{}{}\n", summary, suffix);
 
     let max_name_width = results
         .documents

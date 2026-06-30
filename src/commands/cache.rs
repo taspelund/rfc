@@ -135,5 +135,4 @@ mod tests {
 
         assert_eq!(dir_size_recursive(dir.path()).unwrap(), 13);
     }
-
 }

@@ -58,7 +58,10 @@ impl DocumentFetcher {
 
     /// Resolve a draft name to include its latest version suffix.
     /// RFCs and already-versioned drafts pass through unchanged (borrowed).
-    async fn resolve_draft_version<'a>(&self, doc: &'a DocumentType) -> Result<Cow<'a, DocumentType>> {
+    async fn resolve_draft_version<'a>(
+        &self,
+        doc: &'a DocumentType,
+    ) -> Result<Cow<'a, DocumentType>> {
         match doc {
             DocumentType::Rfc(_) => Ok(Cow::Borrowed(doc)),
             DocumentType::Draft(name) => {

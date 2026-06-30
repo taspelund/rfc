@@ -198,6 +198,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn split_command_double_quoted_arg() {
+        assert_eq!(
+            split_command("echo \"hello world\""),
+            Some(("echo".to_string(), vec!["hello world".to_string()]))
+        );
+    }
+
+    #[test]
+    fn split_command_multiple_quoted_args() {
+        assert_eq!(
+            split_command("echo \"a\" \"b c\""),
+            Some(("echo".to_string(), vec!["a".to_string(), "b c".to_string()]))
+        );
+    }
+
+    #[test]
+    fn split_command_single_quote_inside_double() {
+        assert_eq!(
+            split_command("echo \"it's fine\""),
+            Some(("echo".to_string(), vec!["it's fine".to_string()]))
+        );
+    }
+
     // Unix-only quoting tests
     #[cfg(not(windows))]
     mod unix {
@@ -216,6 +240,41 @@ mod tests {
             assert_eq!(
                 split_command("'/path/to/my program'"),
                 Some(("/path/to/my program".to_string(), vec![]))
+            );
+        }
+
+        #[test]
+        fn escaped_quote_inside_double_quotes() {
+            assert_eq!(
+                split_command(r#"echo "a\"b""#),
+                Some(("echo".to_string(), vec!["a\"b".to_string()]))
+            );
+        }
+
+        #[test]
+        fn double_quote_inside_single_quotes() {
+            assert_eq!(
+                split_command(r#"echo '"hello" world'"#),
+                Some(("echo".to_string(), vec!["\"hello\" world".to_string()]))
+            );
+        }
+
+        #[test]
+        fn unclosed_single_quote_rest_is_literal() {
+            assert_eq!(
+                split_command("echo 'hello world"),
+                Some(("echo".to_string(), vec!["hello world".to_string()]))
+            );
+        }
+
+        #[test]
+        fn mixed_quoting() {
+            assert_eq!(
+                split_command("echo 'a b' \"c d\""),
+                Some((
+                    "echo".to_string(),
+                    vec!["a b".to_string(), "c d".to_string()]
+                ))
             );
         }
     }

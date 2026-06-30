@@ -65,11 +65,7 @@ impl CacheManager {
             Ok(s) => Some(s),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => {
-                eprintln!(
-                    "Warning: failed to read cached {}: {}",
-                    path.display(),
-                    e
-                );
+                eprintln!("Warning: failed to read cached {}: {}", path.display(), e);
                 None
             }
         }
