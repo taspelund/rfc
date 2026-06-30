@@ -355,4 +355,44 @@ mod tests {
             );
         }
     }
+
+    // viewer::open subprocess tests — these actually spawn processes.
+
+    #[test]
+    fn open_with_true_succeeds() {
+        match open("hello", Some("/usr/bin/true")) {
+            Ok(()) => {}
+            Err(e) => panic!("open with /usr/bin/true failed: {:#}", e),
+        }
+    }
+
+    #[test]
+    fn open_with_cat_passes_content() {
+        match open("line1\nline2", Some("/bin/cat")) {
+            Ok(()) => {}
+            Err(e) => panic!("open with /bin/cat failed: {:#}", e),
+        }
+    }
+
+    #[test]
+    fn open_empty_text_succeeds() {
+        match open("", Some("/usr/bin/true")) {
+            Ok(()) => {}
+            Err(e) => panic!("open with /usr/bin/true empty text failed: {:#}", e),
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn open_nonexistent_viewer_fails() {
+        let result = open("content", Some("/nonexistent/editor"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn open_with_empty_string_fails() {
+        let result = open("content", Some(""));
+        assert!(result.is_err());
+    }
 }

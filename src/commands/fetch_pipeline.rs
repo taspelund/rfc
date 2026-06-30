@@ -58,7 +58,7 @@ async fn store_metadata(
     Ok(())
 }
 
-fn html_to_text(html: &str) -> String {
+pub(crate) fn html_to_text(html: &str) -> String {
     html2text::from_read(html.as_bytes(), 80).unwrap_or_else(|e| {
         eprintln!(
             "Warning: HTML to text conversion failed ({}), displaying raw HTML",
@@ -66,4 +66,35 @@ fn html_to_text(html: &str) -> String {
         );
         html.to_string()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_to_text_simple() {
+        let text = html_to_text("<p>hello world</p>");
+        assert!(text.contains("hello world"), "got: {:?}", text);
+    }
+
+    #[test]
+    fn html_to_text_empty() {
+        let text = html_to_text("");
+        assert_eq!(text, "");
+    }
+
+    #[test]
+    fn html_to_text_unicode() {
+        let text = html_to_text("<p>café résumé</p>");
+        assert!(text.contains("café"), "got: {:?}", text);
+        assert!(text.contains("résumé"), "got: {:?}", text);
+    }
+
+    #[test]
+    fn html_to_text_line_breaks() {
+        let text = html_to_text("<p>line1</p><p>line2</p>");
+        assert!(text.contains("line1"), "got: {:?}", text);
+        assert!(text.contains("line2"), "got: {:?}", text);
+    }
 }
