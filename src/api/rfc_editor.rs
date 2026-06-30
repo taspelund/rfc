@@ -18,6 +18,9 @@ struct DraftInfo {
 /// drafts the user supplied unversioned.
 pub struct DocumentFetcher {
     client: Client,
+    rfc_editor_url: String,
+    archive_url: String,
+    datatracker_url: String,
 }
 
 impl DocumentFetcher {
@@ -30,7 +33,27 @@ impl DocumentFetcher {
     /// client back both this and `DataTrackerClient` so we don't pay for
     /// two connection pools per command invocation.
     pub fn with_client(client: Client) -> Self {
-        Self { client }
+        Self::with_client_and_urls(
+            client,
+            "https://www.rfc-editor.org",
+            "https://www.ietf.org/archive/id",
+            "https://datatracker.ietf.org",
+        )
+    }
+
+    /// Build a fetcher with explicit base URLs (for testing with mock servers).
+    pub fn with_client_and_urls(
+        client: Client,
+        rfc_editor_url: &str,
+        archive_url: &str,
+        datatracker_url: &str,
+    ) -> Self {
+        Self {
+            client,
+            rfc_editor_url: rfc_editor_url.to_string(),
+            archive_url: archive_url.to_string(),
+            datatracker_url: datatracker_url.to_string(),
+        }
     }
 
     /// Fetch a document, preferring plain text and falling back to HTML.
@@ -69,7 +92,7 @@ impl DocumentFetcher {
                     return Ok(Cow::Borrowed(doc));
                 }
 
-                let url = format!("https://datatracker.ietf.org/doc/{}/doc.json", name);
+                let url = format!("{}/doc/{}/doc.json", self.datatracker_url, name);
                 let response = self
                     .client
                     .get(&url)
@@ -110,10 +133,10 @@ impl DocumentFetcher {
     pub fn html_url(&self, doc: &DocumentType) -> String {
         match doc {
             DocumentType::Rfc(num) => {
-                format!("https://www.rfc-editor.org/rfc/rfc{}.html", num)
+                format!("{}/rfc/rfc{}.html", self.rfc_editor_url, num)
             }
             DocumentType::Draft(name) => {
-                format!("https://datatracker.ietf.org/doc/html/{}", name)
+                format!("{}/doc/html/{}", self.datatracker_url, name)
             }
         }
     }
@@ -122,10 +145,10 @@ impl DocumentFetcher {
     pub fn text_url(&self, doc: &DocumentType) -> String {
         match doc {
             DocumentType::Rfc(num) => {
-                format!("https://www.rfc-editor.org/rfc/rfc{}.txt", num)
+                format!("{}/rfc/rfc{}.txt", self.rfc_editor_url, num)
             }
             DocumentType::Draft(name) => {
-                format!("https://www.ietf.org/archive/id/{}.txt", name)
+                format!("{}/{}.txt", self.archive_url, name)
             }
         }
     }
