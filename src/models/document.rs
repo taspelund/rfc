@@ -118,12 +118,7 @@ pub struct Document {
 impl Document {
     /// Get a short display title (truncated if necessary)
     pub fn short_title(&self, max_len: usize) -> String {
-        if self.title.chars().count() <= max_len {
-            self.title.clone()
-        } else {
-            let truncated: String = self.title.chars().take(max_len.saturating_sub(3)).collect();
-            format!("{}...", truncated)
-        }
+        crate::util::truncate_str(&self.title, max_len)
     }
 }
 

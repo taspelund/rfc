@@ -5,6 +5,7 @@ pub mod api;
 pub mod cache;
 pub mod commands;
 pub mod models;
+mod util;
 
 pub use api::{DataTrackerClient, DocumentFetcher};
 pub use cache::{CacheManager, CacheMetadata, CachedDocument};

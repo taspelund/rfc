@@ -2,6 +2,7 @@ use anyhow::Result;
 
 use crate::cache::CacheManager;
 use crate::models::DocumentType;
+use crate::util::truncate_str;
 
 pub fn list(wide: bool) -> Result<()> {
     let cache = CacheManager::new()?;
@@ -34,7 +35,7 @@ pub fn list(wide: bool) -> Result<()> {
         let name = cached_doc.doc_type.name();
         match &cached_doc.metadata {
             Some(meta) => {
-                let title = truncate(&meta.title, title_width);
+                let title = truncate_str(&meta.title, title_width);
                 println!("{:<width$}  {}", name, title, width = max_name_width);
             }
             None => {
@@ -100,17 +101,6 @@ pub fn remove(document: &str) -> Result<()> {
     Ok(())
 }
 
-/// Truncate `s` to `max_width` characters, replacing the tail with `...`
-/// when the string would be longer. Counts unicode scalar values, not bytes.
-fn truncate(s: &str, max_width: usize) -> String {
-    if max_width == usize::MAX || s.chars().count() <= max_width {
-        s.to_string()
-    } else {
-        let truncated: String = s.chars().take(max_width.saturating_sub(3)).collect();
-        format!("{}...", truncated)
-    }
-}
-
 /// Sum the sizes of all regular files under `dir`, recursively.
 fn dir_size_recursive(dir: &std::path::Path) -> std::io::Result<u64> {
     let mut total = 0u64;
@@ -146,18 +136,4 @@ mod tests {
         assert_eq!(dir_size_recursive(dir.path()).unwrap(), 13);
     }
 
-    #[test]
-    fn truncate_short_string() {
-        assert_eq!(truncate("hello", 80), "hello");
-    }
-
-    #[test]
-    fn truncate_long_string() {
-        assert_eq!(truncate("hello world", 8), "hello...");
-    }
-
-    #[test]
-    fn truncate_unlimited() {
-        assert_eq!(truncate("hello world", usize::MAX), "hello world");
-    }
 }
