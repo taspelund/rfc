@@ -4,9 +4,17 @@
 use anyhow::Result;
 use chrono::Utc;
 
-use crate::api::{DataTrackerClient, DocumentFetcher};
+use crate::api::{build_http_client, DataTrackerClient, DocumentFetcher};
 use crate::cache::{CacheManager, CacheMetadata};
 use crate::models::{DocumentType, Format};
+
+/// Create a shared HTTP client and split it into fetcher + datatracker.
+pub(super) fn setup_http_clients() -> Result<(DocumentFetcher, DataTrackerClient)> {
+    let http = build_http_client()?;
+    let fetcher = DocumentFetcher::with_client(http.clone());
+    let datatracker = DataTrackerClient::with_client(http);
+    Ok((fetcher, datatracker))
+}
 
 /// Fetch a document and store both its content and metadata in the cache.
 /// Metadata fetch failures are non-fatal — the content is still returned.
