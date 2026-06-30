@@ -124,10 +124,15 @@ fn split_command(s: &str) -> Option<(String, Vec<String>)> {
             }
             c if c.is_whitespace() && {
                 #[cfg(windows)]
-                { !in_double_quote }
+                {
+                    !in_double_quote
+                }
                 #[cfg(not(windows))]
-                { !in_double_quote && !in_single_quote }
-            } => {
+                {
+                    !in_double_quote && !in_single_quote
+                }
+            } =>
+            {
                 if had_char {
                     parts.push(current.clone());
                     current.clear();
@@ -225,7 +230,10 @@ mod tests {
             // Backslashes in Windows paths must not be treated as escapes.
             assert_eq!(
                 split_command(r"C:\Program Files\editor.exe"),
-                Some((r"C:\Program".to_string(), vec!["Files\\editor.exe".to_string()]))
+                Some((
+                    r"C:\Program".to_string(),
+                    vec!["Files\\editor.exe".to_string()]
+                ))
             );
         }
 
