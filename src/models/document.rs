@@ -1,10 +1,9 @@
-use serde::{Deserialize, Serialize};
 use urlencoding::encode;
 
 use crate::api::DATATRACKER_BASE_URL;
 
 /// The type of document - either an RFC or an Internet-Draft
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DocumentType {
     /// An RFC document with its number
     Rfc(u32),
@@ -87,7 +86,7 @@ impl std::fmt::Display for DocumentType {
 }
 
 /// Document content format
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     Html,
     Text,
@@ -107,7 +106,7 @@ impl Format {
 /// Only the fields the CLI actually displays are kept; richer metadata
 /// (pages, authors, publication date, etc.) lives on the wire type and
 /// is dropped at the API boundary.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Document {
     /// Canonical name (e.g. `rfc9000` or `draft-ietf-quic-transport-34`).
     pub name: String,
@@ -117,22 +116,9 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(name: String, title: String, doc_type: DocumentType) -> Self {
-        Self {
-            name,
-            title,
-            doc_type,
-        }
-    }
-
     /// Get a short display title (truncated if necessary)
     pub fn short_title(&self, max_len: usize) -> String {
-        if self.title.chars().count() <= max_len {
-            self.title.clone()
-        } else {
-            let truncated: String = self.title.chars().take(max_len.saturating_sub(3)).collect();
-            format!("{}...", truncated)
-        }
+        crate::util::truncate_str(&self.title, max_len)
     }
 }
 
@@ -221,11 +207,11 @@ mod tests {
 
     #[test]
     fn test_short_title() {
-        let doc = Document::new(
-            "rfc9000".to_string(),
-            "A Very Long Title That Needs Truncation".to_string(),
-            DocumentType::Rfc(9000),
-        );
+        let doc = Document {
+            name: "rfc9000".to_string(),
+            title: "A Very Long Title That Needs Truncation".to_string(),
+            doc_type: DocumentType::Rfc(9000),
+        };
 
         // No truncation needed
         assert_eq!(
@@ -244,11 +230,11 @@ mod tests {
     #[test]
     fn test_short_title_utf8() {
         // Test with multibyte UTF-8 characters to ensure no panic
-        let doc = Document::new(
-            "rfc1234".to_string(),
-            "Café résumé naïve".to_string(),
-            DocumentType::Rfc(1234),
-        );
+        let doc = Document {
+            name: "rfc1234".to_string(),
+            title: "Café résumé naïve".to_string(),
+            doc_type: DocumentType::Rfc(1234),
+        };
 
         // Should not panic on multibyte characters
         let result = doc.short_title(10);

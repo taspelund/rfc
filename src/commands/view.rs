@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
 
-use crate::api::{DataTrackerClient, DocumentFetcher};
 use crate::cache::CacheManager;
 use crate::models::{DocumentType, Format};
 
-use super::fetch_pipeline::fetch_and_cache;
+use super::fetch_pipeline::{fetch_and_cache, setup_http_clients};
 use super::viewer;
 
 /// Default-path command: cache-or-fetch then open in a viewer.
@@ -22,9 +21,7 @@ pub async fn run(document: &str, open_with: Option<&str>, web: bool) -> Result<(
             cached
         }
         None => {
-            let http = crate::api::build_http_client()?;
-            let fetcher = DocumentFetcher::with_client(http.clone());
-            let datatracker = DataTrackerClient::with_client(http);
+            let (fetcher, datatracker) = setup_http_clients()?;
             fetch_and_cache(&doc_type, &cache, &fetcher, &datatracker).await?
         }
     };

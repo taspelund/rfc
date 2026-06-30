@@ -61,7 +61,14 @@ impl CacheManager {
     /// Get cached document content
     pub fn get_document(&self, doc: &DocumentType, format: Format) -> Option<String> {
         let path = self.document_path(doc, format);
-        fs::read_to_string(path).ok()
+        match fs::read_to_string(&path) {
+            Ok(s) => Some(s),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+            Err(e) => {
+                eprintln!("Warning: failed to read cached {}: {}", path.display(), e);
+                None
+            }
+        }
     }
 
     /// Store document content in cache
@@ -144,14 +151,14 @@ impl CacheManager {
     }
 
     /// Get the path for a cached document
-    fn document_path(&self, doc: &DocumentType, format: Format) -> PathBuf {
+    pub(crate) fn document_path(&self, doc: &DocumentType, format: Format) -> PathBuf {
         self.cache_dir
             .join("documents")
             .join(format!("{}.{}", doc.name(), format.extension()))
     }
 
     /// Get the path for metadata file
-    fn metadata_path(&self, doc: &DocumentType) -> PathBuf {
+    pub(crate) fn metadata_path(&self, doc: &DocumentType) -> PathBuf {
         self.cache_dir
             .join("documents")
             .join(format!("{}.meta", doc.name()))
@@ -160,7 +167,18 @@ impl CacheManager {
     /// Get cached metadata for a document
     pub fn get_metadata(&self, doc: &DocumentType) -> Option<CacheMetadata> {
         let path = self.metadata_path(doc);
-        let content = fs::read_to_string(path).ok()?;
+        let content = match fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to read cached metadata {}: {}",
+                    path.display(),
+                    e
+                );
+                return None;
+            }
+        };
         serde_json::from_str(&content).ok()
     }
 
@@ -352,5 +370,73 @@ mod tests {
 
         // Should return None for missing metadata
         assert!(cache.get_metadata(&doc).is_none());
+    }
+
+    #[test]
+    fn get_metadata_corrupt_json_returns_none() {
+        let (cache, _temp) = test_cache();
+        let doc = DocumentType::Rfc(9000);
+        let meta_path = cache.metadata_path(&doc);
+        std::fs::create_dir_all(meta_path.parent().unwrap()).unwrap();
+        std::fs::write(&meta_path, r#"{"title": "truncated"#).unwrap();
+        assert!(cache.get_metadata(&doc).is_none());
+    }
+
+    #[test]
+    fn get_document_permission_error_returns_none() {
+        let (cache, _temp) = test_cache();
+        let doc = DocumentType::Rfc(9000);
+        cache.store_document(&doc, Format::Text, "content").unwrap();
+        let path = cache.document_path(&doc, Format::Text);
+
+        // Make the file unreadable on Unix.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+            assert!(cache.get_document(&doc, Format::Text).is_none());
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            // On non-Unix platforms we just verify the normal read works.
+            assert!(cache.get_document(&doc, Format::Text).is_some());
+        }
+    }
+
+    #[test]
+    fn get_metadata_permission_error_returns_none() {
+        let (cache, _temp) = test_cache();
+        let doc = DocumentType::Rfc(9000);
+        let meta = CacheMetadata {
+            title: "Test".to_string(),
+            cached_at: Utc::now(),
+        };
+        cache.store_metadata(&doc, &meta).unwrap();
+        let meta_path = cache.metadata_path(&doc);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o000)).unwrap();
+            assert!(cache.get_metadata(&doc).is_none());
+            std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            assert!(cache.get_metadata(&doc).is_some());
+        }
+    }
+
+    #[test]
+    fn store_document_creates_parent_directories() {
+        let (cache, _temp) = test_cache();
+        // Use a nested path that doesn't exist yet
+        let doc = DocumentType::Rfc(9999);
+        cache
+            .store_document(&doc, Format::Text, "deep test")
+            .unwrap();
+        let retrieved = cache.get_document(&doc, Format::Text);
+        assert_eq!(retrieved, Some("deep test".to_string()));
     }
 }

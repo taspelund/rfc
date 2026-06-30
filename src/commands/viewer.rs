@@ -54,11 +54,21 @@ pub fn open(text: &str, open_with: Option<&str>) -> Result<()> {
 /// (`VISUAL` before `EDITOR`) used by git, gh, starship, and most CLI tools.
 /// Falls back to a platform-specific default when no env var is set.
 fn resolve_viewer() -> Option<String> {
-    env::var("VISUAL")
-        .or_else(|_| env::var("EDITOR"))
-        .or_else(|_| env::var("PAGER"))
-        .ok()
-        .or_else(platform_default_viewer)
+    resolve_viewer_from(
+        env::var("VISUAL").ok(),
+        env::var("EDITOR").ok(),
+        env::var("PAGER").ok(),
+    )
+}
+
+/// Pure-function core of [`resolve_viewer`] — takes already-read env vars so
+/// tests don't need to manipulate the real environment.
+pub(crate) fn resolve_viewer_from(
+    visual: Option<String>,
+    editor: Option<String>,
+    pager: Option<String>,
+) -> Option<String> {
+    visual.or(editor).or(pager).or_else(platform_default_viewer)
 }
 
 /// Platform-specific last-resort viewer.
@@ -160,6 +170,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn resolve_viewer_visual_takes_precedence() {
+        assert_eq!(
+            resolve_viewer_from(
+                Some("nvim".to_string()),
+                Some("vim".to_string()),
+                Some("less".to_string()),
+            ),
+            Some("nvim".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_viewer_editor_fallback() {
+        assert_eq!(
+            resolve_viewer_from(None, Some("vim".to_string()), Some("less".to_string())),
+            Some("vim".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_viewer_pager_fallback() {
+        assert_eq!(
+            resolve_viewer_from(None, None, Some("less".to_string())),
+            Some("less".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_viewer_all_none_on_unix() {
+        // On Unix platform_default_viewer returns None.
+        #[cfg(not(windows))]
+        assert_eq!(resolve_viewer_from(None, None, None), None);
+        #[cfg(windows)]
+        assert_eq!(
+            resolve_viewer_from(None, None, None),
+            Some("notepad.exe".to_string())
+        );
+    }
+
+    #[test]
     fn split_command_basic() {
         assert_eq!(split_command("vim"), Some(("vim".to_string(), vec![])));
     }
@@ -198,6 +248,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn split_command_double_quoted_arg() {
+        assert_eq!(
+            split_command("echo \"hello world\""),
+            Some(("echo".to_string(), vec!["hello world".to_string()]))
+        );
+    }
+
+    #[test]
+    fn split_command_multiple_quoted_args() {
+        assert_eq!(
+            split_command("echo \"a\" \"b c\""),
+            Some(("echo".to_string(), vec!["a".to_string(), "b c".to_string()]))
+        );
+    }
+
+    #[test]
+    fn split_command_single_quote_inside_double() {
+        assert_eq!(
+            split_command("echo \"it's fine\""),
+            Some(("echo".to_string(), vec!["it's fine".to_string()]))
+        );
+    }
+
     // Unix-only quoting tests
     #[cfg(not(windows))]
     mod unix {
@@ -216,6 +290,41 @@ mod tests {
             assert_eq!(
                 split_command("'/path/to/my program'"),
                 Some(("/path/to/my program".to_string(), vec![]))
+            );
+        }
+
+        #[test]
+        fn escaped_quote_inside_double_quotes() {
+            assert_eq!(
+                split_command(r#"echo "a\"b""#),
+                Some(("echo".to_string(), vec!["a\"b".to_string()]))
+            );
+        }
+
+        #[test]
+        fn double_quote_inside_single_quotes() {
+            assert_eq!(
+                split_command(r#"echo '"hello" world'"#),
+                Some(("echo".to_string(), vec!["\"hello\" world".to_string()]))
+            );
+        }
+
+        #[test]
+        fn unclosed_single_quote_rest_is_literal() {
+            assert_eq!(
+                split_command("echo 'hello world"),
+                Some(("echo".to_string(), vec!["hello world".to_string()]))
+            );
+        }
+
+        #[test]
+        fn mixed_quoting() {
+            assert_eq!(
+                split_command("echo 'a b' \"c d\""),
+                Some((
+                    "echo".to_string(),
+                    vec!["a b".to_string(), "c d".to_string()]
+                ))
             );
         }
     }
@@ -255,5 +364,45 @@ mod tests {
                 ))
             );
         }
+    }
+
+    // viewer::open subprocess tests — these actually spawn processes.
+
+    #[test]
+    fn open_with_true_succeeds() {
+        match open("hello", Some("/usr/bin/true")) {
+            Ok(()) => {}
+            Err(e) => panic!("open with /usr/bin/true failed: {:#}", e),
+        }
+    }
+
+    #[test]
+    fn open_with_cat_passes_content() {
+        match open("line1\nline2", Some("/bin/cat")) {
+            Ok(()) => {}
+            Err(e) => panic!("open with /bin/cat failed: {:#}", e),
+        }
+    }
+
+    #[test]
+    fn open_empty_text_succeeds() {
+        match open("", Some("/usr/bin/true")) {
+            Ok(()) => {}
+            Err(e) => panic!("open with /usr/bin/true empty text failed: {:#}", e),
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn open_nonexistent_viewer_fails() {
+        let result = open("content", Some("/nonexistent/editor"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn open_with_empty_string_fails() {
+        let result = open("content", Some(""));
+        assert!(result.is_err());
     }
 }

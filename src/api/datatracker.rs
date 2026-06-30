@@ -10,6 +10,7 @@ pub const DATATRACKER_BASE_URL: &str = "https://datatracker.ietf.org";
 /// metadata lookups (titles, draft revisions).
 pub struct DataTrackerClient {
     client: Client,
+    base_url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,7 +49,12 @@ impl DataTrackerClient {
 
     /// Build a client that reuses an existing HTTP client.
     pub fn with_client(client: Client) -> Self {
-        Self { client }
+        Self::with_client_and_base_url(client, DATATRACKER_BASE_URL.to_string())
+    }
+
+    /// Build a client with an explicit base URL (for testing with mock servers).
+    pub fn with_client_and_base_url(client: Client, base_url: String) -> Self {
+        Self { client, base_url }
     }
 
     /// Search for documents matching the query.
@@ -100,7 +106,7 @@ impl DataTrackerClient {
 
         let mut url = format!(
             "{}/api/v1/doc/document/?title__icontains={}&type__in={}&limit={}&format=json",
-            DATATRACKER_BASE_URL,
+            self.base_url,
             urlencoding::encode(primary_token),
             type_filter,
             api_limit
@@ -181,7 +187,7 @@ impl DataTrackerClient {
     pub async fn get_document(&self, name: &str) -> Result<Document> {
         let url = format!(
             "{}/api/v1/doc/document/{}/?format=json",
-            DATATRACKER_BASE_URL, name
+            self.base_url, name
         );
 
         let response = self

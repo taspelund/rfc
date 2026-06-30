@@ -25,23 +25,10 @@ pub async fn run(args: Args) -> Result<()> {
 
     let shown = results.len();
 
-    if let Some(total) = results.total_count {
-        if results.has_more {
-            println!(
-                "\nShowing {} of {} results. Increase --limit <N> to show more.\n",
-                shown, total
-            );
-        } else {
-            println!("\nFound {} results:\n", total);
-        }
-    } else if results.has_more {
-        println!(
-            "\nShowing {} results. Increase --limit <N> to show more.\n",
-            shown
-        );
-    } else {
-        println!("\nFound {} results:\n", shown);
-    }
+    println!(
+        "\n{}\n",
+        format_search_summary(shown, results.total_count, results.has_more)
+    );
 
     let max_name_width = results
         .documents
@@ -67,4 +54,63 @@ pub async fn run(args: Args) -> Result<()> {
 
     println!("\nUse 'rfc <document>' to read a document");
     Ok(())
+}
+
+/// Format the search results summary line (shown count, total count, "show more" hint).
+pub(crate) fn format_search_summary(
+    shown: usize,
+    total_count: Option<u32>,
+    has_more: bool,
+) -> String {
+    let summary = match (total_count, has_more) {
+        (Some(total), true) => format!("Showing {} of {} results", shown, total),
+        (Some(total), false) => format!("Found {} results", total),
+        (None, true) => format!("Showing {} results", shown),
+        (None, false) => format!("Found {} results", shown),
+    };
+    let suffix = if has_more {
+        ". Increase --limit <N> to show more"
+    } else {
+        ":"
+    };
+    format!("{}{}", summary, suffix)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn summary_with_total_and_more() {
+        assert_eq!(
+            format_search_summary(10, Some(25), true),
+            "Showing 10 of 25 results. Increase --limit <N> to show more"
+        );
+    }
+
+    #[test]
+    fn summary_with_total_and_done() {
+        assert_eq!(
+            format_search_summary(25, Some(25), false),
+            "Found 25 results:"
+        );
+    }
+
+    #[test]
+    fn summary_no_total_with_more() {
+        assert_eq!(
+            format_search_summary(5, None, true),
+            "Showing 5 results. Increase --limit <N> to show more"
+        );
+    }
+
+    #[test]
+    fn summary_no_total_and_done() {
+        assert_eq!(format_search_summary(5, None, false), "Found 5 results:");
+    }
+
+    #[test]
+    fn summary_zero_results() {
+        assert_eq!(format_search_summary(0, Some(0), false), "Found 0 results:");
+    }
 }

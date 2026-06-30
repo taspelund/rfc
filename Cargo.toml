@@ -54,4 +54,6 @@ tempfile = "3"
 opener = "0.8"
 
 [dev-dependencies]
-tokio-test = "0.4"
+wiremock = "0.6"
+assert_cmd = "2"
+predicates = "3"
