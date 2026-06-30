@@ -1,9 +1,7 @@
-use serde::Serialize;
-
 use super::Document;
 
 /// Filter for search results
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SearchFilter {
     /// Only return RFCs
     RfcsOnly,
@@ -26,7 +24,7 @@ impl SearchFilter {
 }
 
 /// Search results from the API
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
 pub struct SearchResult {
     /// List of matching documents
     pub documents: Vec<Document>,

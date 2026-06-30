@@ -54,4 +54,3 @@ tempfile = "3"
 opener = "0.8"
 
 [dev-dependencies]
-tokio-test = "0.4"
